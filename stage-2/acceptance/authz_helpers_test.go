@@ -1,6 +1,7 @@
 package acceptance
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -119,4 +120,12 @@ func checkMe(t testing.TB, m map[string]any) {
 	if tot != b || av != tot-h || av < 0 || h < 0 {
 		t.Fatalf("/me invariant broken: %v", m)
 	}
+}
+
+func mustJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

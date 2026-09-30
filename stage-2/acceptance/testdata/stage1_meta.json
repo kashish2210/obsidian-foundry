@@ -1,0 +1,103 @@
+{
+ "tokens": {
+  "ada": "b00525b8fdf19429151b685b8ee3d1bacc707f6d3ee2998a",
+  "bob": "98ecd7ea816d3633e1d08411145cb8c0e4038d9c6841270c",
+  "cy": "b401d75de3f9f7f66af86db67dfbb53d1059e88a09e8ac98",
+  "op": "a432c1b88122ca771bd7874d87728b7ec7f865feeb629efe"
+ },
+ "pay": {
+  "key": "lost-key-1",
+  "body": {
+   "to_handle": "bob",
+   "amount": 100,
+   "note": "lost response"
+  },
+  "response": {
+   "payment_id": "p_1",
+   "from_user_id": "u_ada",
+   "from_handle": "ada",
+   "to_user_id": "u_bob",
+   "to_handle": "bob",
+   "amount": 100,
+   "currency": "EUR",
+   "note": "lost response",
+   "visibility": "public",
+   "request_id": null,
+   "settlement_id": null,
+   "created_at": "2026-09-30T22:19:42+00:00"
+  }
+ },
+ "settlement": {
+  "key": "settle-key-1",
+  "body": {
+   "transfers": [
+    {
+     "from_handle": "ada",
+     "to_handle": "cy",
+     "amount": 50
+    }
+   ]
+  },
+  "response": {
+   "settlement_id": "st_1",
+   "committed_at": "2026-09-30T22:19:42+00:00",
+   "payments": [
+    {
+     "payment_id": "p_2",
+     "from_user_id": "u_ada",
+     "from_handle": "ada",
+     "to_user_id": "u_cy",
+     "to_handle": "cy",
+     "amount": 50,
+     "currency": "EUR",
+     "note": "",
+     "visibility": "public",
+     "request_id": null,
+     "settlement_id": "st_1",
+     "created_at": "2026-09-30T22:19:42+00:00"
+    }
+   ]
+  }
+ },
+ "failed": {
+  "key": "failed-key-1",
+  "body": {
+   "to_handle": "ada",
+   "amount": 99999
+  }
+ },
+ "me": {
+  "ada": {
+   "user_id": "u_ada",
+   "display_name": "Ada",
+   "handle": "ada",
+   "balance": 9850,
+   "currency": "EUR",
+   "minor_units": 2
+  },
+  "bob": {
+   "user_id": "u_bob",
+   "display_name": "Bob",
+   "handle": "bob",
+   "balance": 2600,
+   "currency": "EUR",
+   "minor_units": 2
+  },
+  "cy": {
+   "user_id": "u_cy",
+   "display_name": "Cy",
+   "handle": "cy",
+   "balance": 550,
+   "currency": "EUR",
+   "minor_units": 2
+  },
+  "op": {
+   "user_id": "u_op",
+   "display_name": "Op",
+   "handle": "op",
+   "balance": 0,
+   "currency": "EUR",
+   "minor_units": 2
+  }
+ }
+}

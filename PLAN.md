@@ -1,108 +1,67 @@
-# Obsidian Foundry
+# Obsidian Foundry: working plan
 
-**Hackathon:** WeAreDevelopers x BAND — The Dark Factory (lablab.ai)
-**Build window:** Sep 26 – **Oct 5, 2026** (4 days left as of Sep 30, so this one comes first)
-**Track:** `pocketful` (wallet / payments), with the rule "money must never be created, destroyed or spent twice"
-**Team:** Vikas, Kashish, Dhruv
+**Hackathon:** WeAreDevelopers x BAND, The Dark Factory, `pocketful` track
+**Deadline:** Mon Oct 5, 23:59 PDT (Tue Oct 6, 12:29 PM IST)
+**Kickoff package:** https://github.com/band-ai/dark-factory-wearedevs (cloned at `K:/hackathons/dark-factory-wearedevs`)
 
----
+## The rules that change everything
 
-## 1. What we're actually building
+1. **Hand-built code doesn't count.** Every line under `stage-N/` has to come out of the
+   Band Desktop room. We (and Claude Code outside the room) only build the *factory*:
+   mandates, FACTORY.md, the dispatch task. We never commit into `stage-*/`.
+2. **Mandates must be generic.** No endpoint paths, field names or error codes. The
+   harness scans for this, and a hit disqualifies us. Run `harness check` after every
+   mandate edit.
+3. **Don't write to the tests.** Only 79% / 35% / 9% / 16% of stages 1–4 are shipped.
+   Judging uses the full set, so we build to the spec, not to green checks.
+4. **The submitted run is hands-off.** One dispatch message, then nothing until the
+   final report. Practice runs can be steered as much as we like.
 
-The challenge isn't the wallet app itself. It's the **factory** that builds it. In BAND Desktop we set up at least 3 coding-agent seats that plan, build, review and verify the service one stage at a time without us steering each step.
+So the Rust oracle from the first plan is gone: a hand-written, track-specific checker
+would make the factory less generic, and the band can't be the one who wrote it. Its job
+now belongs to the **tester** seat, which writes a black-box suite from the spec for
+every stage.
 
-Our angle: **a factory that proves correctness instead of just claiming it.** Most teams will have a reviewer agent that reads code and says "looks good". We add a separate, deterministic **Rust oracle** that:
-
-- keeps a reference model of the ledger in memory,
-- hits the service with thousands of randomised operations from N concurrent clients, including retries and duplicate idempotency keys,
-- checks conservation of money, no negative balances and no double-spends at every read,
-- fails the stage if anything drifts, so the verifier seat sends the work back to the builder.
-
-That maps straight onto the judging split: factory design 50%, app quality 25%, agent teamwork 25%.
-
-### Why pocketful over tablekeeper
-Money invariants are easy to state exactly (the sum of all balances is constant, apart from explicit mint and burn), so the oracle can be strict and the demo is clear. Double-booking under time zones is fuzzier to verify in 4 days.
-
----
-
-## 2. Stack (and why)
-
-| Layer | Choice | Why |
-|---|---|---|
-| Service (built by agents) | **Go**, stdlib `net/http`, `database/sql` + SQLite (`modernc.org/sqlite`, pure Go) | Builds fast, one static binary, and `go mod vendor` makes the no-network container build trivial. No framework for agents to misuse. |
-| Oracle / verifier | **Rust** (tokio, reqwest, proptest) | Property-based testing plus real concurrency. The type system keeps the reference model honest. |
-| Container | Multi-stage Docker, `--network=none` build, distroless runtime | Matches the "clean container, no outbound network" rule exactly. |
-| Factory config | Plain files: `seats.toml`, generic mandates in markdown | The rules require generic mandates, and plain files are easy to show in the video. |
-
-**Hard rule we can't break:** mandates stay generic. No "wallet", no endpoint names, no field names in `factory/mandates/*`. Track-specific stuff only lives in `factory/brief/` (the kickoff brief) and in what the planner seat derives from it.
-
----
-
-## 3. Folder structure (follow this)
+## Repository layout (required by the judges)
 
 ```
 obsidian-foundry/
-├── PLAN.md                     <- this file
-├── factory/
-│   ├── seats.toml              <- seat -> mandate -> harness/model mapping
-│   ├── mandates/               <- GENERIC role mandates (planner/builder/reviewer/verifier)
-│   ├── agreements/             <- shared working agreement, definition of done
-│   ├── brief/                  <- kickoff brief + stage specs from the organisers (track-specific)
-│   ├── dispatch/               <- tasks the planner dispatches, one file per stage
-│   └── tools/guard/pre-commit  <- blocks commits outside the current stage folder
-├── oracle/                     <- Rust invariant oracle (we write this by hand)
-│   ├── Cargo.toml
-│   └── src/{main,model,invariants,workload}.rs
-├── stages/
-│   └── stage-N/                <- agent-written Go service per stage (go.mod, vendor/, cmd/service)
-├── deploy/
-│   ├── Dockerfile              <- offline build, distroless runtime
-│   └── compose.yaml
-├── scripts/offline-build.sh    <- proves the no-network build
-└── .github/workflows/ci.yml
+├── README.md          team, track, how to read the repo            (we write, last day)
+├── FACTORY.md         seats, design, costs, failure handling       (drafted, fill numbers)
+├── mandates/          coordinator, implementer, tester, reviewer   (done, generic)
+├── dispatch/          the task we paste to @coordinator            (done)
+├── room.json          full session download from the Band console  (after the run)
+├── stage-1/ .. 4/     written by the band only: source, Dockerfile, RUN.md, LEDGER.md, acceptance/
+└── PLAN.md            this file
 ```
 
-Ownership rule: **we write `factory/`, `oracle/`, `deploy/`. Agents write `stages/`.** If a human edits `stages/`, the demo loses its point.
+## Local workspace
 
----
+| Path | What |
+|---|---|
+| `K:/hackathons/dark-factory-wearedevs` | kickoff: specs, harness (run it from here) |
+| `K:/hackathons/band-work/checks` | harness `--out` dirs (a new name every run) |
+| `K:/hackathons/obsidian-foundry` | the real result repo (the final run goes here) |
 
-## 4. Seats
+Harness: `conda run -n venv python -m harness ...` (deps + Chromium installed).
 
-| Seat | Job | Hands off to |
-|---|---|---|
-| planner | Reads the brief, splits the stage into tasks, writes `dispatch/stage-N.md` | builder |
-| builder | Implements the tasks in `stages/stage-N/` | reviewer |
-| reviewer | Code review: readability, error handling, API shape | builder (fix) or verifier |
-| verifier | Runs the offline build and the oracle, and rejects on any invariant break | builder (fix) or done |
-
-It's a good idea to use two different model families across the seats (one for builder, another for reviewer and verifier), so the reviewer doesn't share the builder's blind spots.
-
----
-
-## 5. Plan (4 days)
+## Timeline
 
 | Day | Goal |
 |---|---|
-| Sep 30 | Read the kickoff brief into `factory/brief/`, set up BAND Desktop, finalise the seats and generic mandates |
-| Oct 1 | Oracle MVP: model + conservation invariant + concurrent workload. Stage 1 run end to end |
-| Oct 2 | Offline Docker build green, guard hook, stage 2 |
-| Oct 3 | Harden: idempotency / retry scenarios in the oracle, a planted-bug test (to prove the verifier catches it) |
-| Oct 4 | More stages if stable, polish UI, **record the BAND room** (a missing recording disqualifies us) |
-| Oct 5 | Submit: public repo, video, description |
+| Oct 1 | Band Desktop set up, 4 seats, @handle round trip works. First pocketful run (a trial: steering allowed). |
+| Oct 2 | Fix what the trial exposed (permissions, handoffs, paths), wipe stage-*/, rerun. |
+| Oct 3 | Tune mandates from the practice runs (keep them generic!). Measure time and cost per stage. |
+| Oct 4 | **The submitted run**: fresh room, the real repo, one dispatch, hands off. Record the room. |
+| Oct 5 | Download room.json, harness check + isolated `--all` on a fresh clone, README/FACTORY numbers, video, slides, submit. |
 
-Suggested split: one person on the factory (seats, mandates, BAND), one on the oracle (Rust), one on the container, CI, recording and submission.
+## Human-only steps (Band Desktop)
 
----
-
-## 6. Submission checklist
-
-- [ ] At least 3 distinct seats with generic mandates
-- [ ] Public GitHub repo, at least Stage 1 complete
-- [ ] Video including the BAND Desktop room recording
-- [ ] `docker build --network=none` passes from clean
-- [ ] Planted-bug demo: verifier catches it and the builder fixes it
-
-## 7. Toolchain
-
-- Go 1.26+, Rust stable (edition 2024), Docker Desktop.
-- `go mod vendor` inside every stage before commit, and commit `vendor/`.
+1. Install Band Desktop, sign in at app.band.ai, and join the hackathon.
+2. Create 4 local agent seats (Claude Code): `coordinator`, `implementer`, `tester`,
+   `reviewer`. Paste each mandate as that seat's instructions. Set the model per the
+   mandate header (change the header if Band shows a different id).
+3. Give the seats permissions for file edits in the result repo, git, docker, go and
+   `conda run`.
+4. Make one room, add all 4, and do a manual @handle hello in both directions.
+5. Paste `dispatch/pocketful.md` to the coordinator and watch.

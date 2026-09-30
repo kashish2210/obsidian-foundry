@@ -7,28 +7,26 @@ desktop.ini
 !.vscode/extensions.json
 *.swp
 
-# --- Rust (oracle) ---
-/oracle/target/
-**/*.rs.bk
-
-# --- Go (stage services) ---
-/stages/**/bin/
+# --- Go build output inside stage folders ---
+stage-*/bin/
+stage-*/service
+stage-*/server
 *.exe
 *.test
 *.out
 coverage.*
-# vendor/ is COMMITTED on purpose: the service must build with no outbound network
 
-# --- runtime / local state ---
-*.db
-*.db-journal
-*.sqlite
-*.log
-tmp/
+# --- Python (browser acceptance tests) ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# --- harness output (kept outside the repo, this is a safety net) ---
+runs/
+checks/
+
+# --- secrets never go in: this repository is public ---
 .env
 .env.*
-!.env.example
-
-# --- factory run artifacts ---
-/factory/runs/
-/recordings/
+*.pem
+*.key

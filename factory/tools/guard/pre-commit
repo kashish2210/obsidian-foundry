@@ -1,4 +1,0 @@
-#!/usr/bin/env sh
-# Guard: commits may only touch stages/<current-stage>/ and must come from a seat.
-# TODO: implement
-exit 0

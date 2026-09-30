@@ -7,18 +7,19 @@ import (
 
 // PaymentView is the API representation of a payment.
 type PaymentView struct {
-	PaymentID    string  `json:"payment_id"`
-	FromUserID   string  `json:"from_user_id"`
-	FromHandle   string  `json:"from_handle"`
-	ToUserID     string  `json:"to_user_id"`
-	ToHandle     string  `json:"to_handle"`
-	Amount       int64   `json:"amount"`
-	Currency     string  `json:"currency"`
-	Note         string  `json:"note"`
-	Visibility   string  `json:"visibility"`
-	RequestID    *string `json:"request_id"`
-	SettlementID *string `json:"settlement_id"`
-	CreatedAt    string  `json:"created_at"`
+	PaymentID       string  `json:"payment_id"`
+	FromUserID      string  `json:"from_user_id"`
+	FromHandle      string  `json:"from_handle"`
+	ToUserID        string  `json:"to_user_id"`
+	ToHandle        string  `json:"to_handle"`
+	Amount          int64   `json:"amount"`
+	Currency        string  `json:"currency"`
+	Note            string  `json:"note"`
+	Visibility      string  `json:"visibility"`
+	RequestID       *string `json:"request_id"`
+	SettlementID    *string `json:"settlement_id"`
+	AuthorizationID *string `json:"authorization_id"`
+	CreatedAt       string  `json:"created_at"`
 }
 
 // PaymentInput is a validated direct payment.
@@ -41,19 +42,24 @@ func (tx *Tx) paymentView(p *Payment) PaymentView {
 		PaymentID: p.ID, FromUserID: p.FromID, FromHandle: from.Handle,
 		ToUserID: p.ToID, ToHandle: to.Handle, Amount: p.Amount,
 		Currency: tx.st.Currency, Note: p.Note, Visibility: p.Visibility,
-		RequestID: p.RequestID, SettlementID: p.SettlementID, CreatedAt: p.CreatedAt,
+		RequestID: p.RequestID, SettlementID: p.SettlementID, AuthorizationID: p.AuthorizationID, CreatedAt: p.CreatedAt,
 	}
+}
+
+// links say what a payment was created for; all nil for a direct payment.
+type links struct {
+	requestID, settlementID, authorizationID *string
 }
 
 // transfer moves money and records the payment. Callers must have checked
 // that from can afford amount.
-func (tx *Tx) transfer(from, to *User, amount int64, note, visibility string, requestID, settlementID *string, createdAt string) *Payment {
+func (tx *Tx) transfer(from, to *User, amount int64, note, visibility string, l links, createdAt string) *Payment {
 	from.Balance -= amount
 	to.Balance += amount
 	p := &Payment{
 		ID: tx.st.newPaymentID(), FromID: from.ID, ToID: to.ID, Amount: amount,
-		Note: note, Visibility: visibility, RequestID: requestID,
-		SettlementID: settlementID, CreatedAt: createdAt,
+		Note: note, Visibility: visibility, RequestID: l.requestID,
+		SettlementID: l.settlementID, AuthorizationID: l.authorizationID, CreatedAt: createdAt,
 	}
 	tx.st.Payments = append(tx.st.Payments, p)
 	tx.st.paymentsByID[p.ID] = p
@@ -81,13 +87,13 @@ func (tx *Tx) SendPayment(callerID string, in PaymentInput) (PaymentView, error)
 	if to == nil {
 		return PaymentView{}, apierr.NotFound("no user has handle %q", in.ToHandle)
 	}
-	if caller.Balance < in.Amount {
+	if tx.available(caller) < in.Amount {
 		return PaymentView{}, apierr.Conflict("insufficient_funds", "balance is below the amount")
 	}
 	if err := checkCredit(to, in.Amount); err != nil {
 		return PaymentView{}, err
 	}
-	p := tx.transfer(caller, to, in.Amount, in.Note, in.Visibility, nil, nil, now())
+	p := tx.transfer(caller, to, in.Amount, in.Note, in.Visibility, links{}, tx.stamp())
 	return tx.paymentView(p), nil
 }
 

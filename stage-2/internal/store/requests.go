@@ -63,7 +63,7 @@ func (tx *Tx) CreateRequest(callerID string, in RequestInput) (RequestView, erro
 	if payer == nil {
 		return RequestView{}, apierr.NotFound("no user has handle %q", in.PayerHandle)
 	}
-	return tx.requestView(tx.addRequest(caller, payer, in.Amount, in.Note, now())), nil
+	return tx.requestView(tx.addRequest(caller, payer, in.Amount, in.Note, tx.stamp())), nil
 }
 
 // PayRequest pays a pending request from the payer's wallet.
@@ -82,7 +82,7 @@ func (tx *Tx) PayRequest(callerID, requestID, visibility string) (PaymentView, e
 	if r.Status != StatusPending {
 		return PaymentView{}, apierr.Conflict("request_not_pending", "request is %s", r.Status)
 	}
-	if payer.Balance < r.Amount {
+	if tx.available(payer) < r.Amount {
 		return PaymentView{}, apierr.Conflict("insufficient_funds", "balance is below the amount")
 	}
 	requester := tx.st.usersByID[r.RequesterID]
@@ -90,7 +90,7 @@ func (tx *Tx) PayRequest(callerID, requestID, visibility string) (PaymentView, e
 		return PaymentView{}, err
 	}
 	reqID := r.ID
-	p := tx.transfer(payer, requester, r.Amount, r.Note, visibility, &reqID, nil, now())
+	p := tx.transfer(payer, requester, r.Amount, r.Note, visibility, links{requestID: &reqID}, tx.stamp())
 	r.Status = StatusPaid
 	r.PaymentID = &p.ID
 	return tx.paymentView(p), nil

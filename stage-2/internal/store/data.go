@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"pocketful/internal/apierr"
 	"pocketful/internal/money"
@@ -38,15 +39,16 @@ type User struct {
 
 // Payment is a completed money movement.
 type Payment struct {
-	ID           string  `json:"id"`
-	FromID       string  `json:"from_user_id"`
-	ToID         string  `json:"to_user_id"`
-	Amount       int64   `json:"amount"`
-	Note         string  `json:"note"`
-	Visibility   string  `json:"visibility"`
-	RequestID    *string `json:"request_id"`
-	SettlementID *string `json:"settlement_id"`
-	CreatedAt    string  `json:"created_at"`
+	ID              string  `json:"id"`
+	FromID          string  `json:"from_user_id"`
+	ToID            string  `json:"to_user_id"`
+	Amount          int64   `json:"amount"`
+	Note            string  `json:"note"`
+	Visibility      string  `json:"visibility"`
+	RequestID       *string `json:"request_id"`
+	SettlementID    *string `json:"settlement_id"`
+	AuthorizationID *string `json:"authorization_id"`
+	CreatedAt       string  `json:"created_at"`
 }
 
 // Request asks a payer for money.
@@ -94,19 +96,68 @@ type IdempotencyRecord struct {
 	Response    json.RawMessage `json:"response"`
 }
 
+// Authorization statuses. "expired" is also derived: an open authorization
+// whose expiry has passed is reported as expired without being rewritten.
+const (
+	AuthOpen     = "open"
+	AuthCaptured = "captured"
+	AuthVoided   = "voided"
+	AuthExpired  = "expired"
+)
+
+// DefaultAuthorizationTTL is the lifetime in seconds of a new authorization
+// when the fixture does not say otherwise.
+const DefaultAuthorizationTTL = 600
+
+// Authorization reserves part of the payer's wallet for the receiver to
+// capture later. While open and unexpired it holds Amount-CapturedAmount.
+type Authorization struct {
+	ID             string   `json:"id"`
+	FromID         string   `json:"from_user_id"`
+	ToID           string   `json:"to_user_id"`
+	Amount         int64    `json:"amount"`
+	CapturedAmount int64    `json:"captured_amount"`
+	Note           string   `json:"note"`
+	Visibility     string   `json:"visibility"`
+	Status         string   `json:"status"`
+	ExpiresAt      string   `json:"expires_at"`
+	PaymentIDs     []string `json:"payment_ids"`
+	CreatedAt      string   `json:"created_at"`
+
+	expires time.Time
+}
+
+// remaining is the part of the authorization not yet captured.
+func (a *Authorization) remaining() int64 { return a.Amount - a.CapturedAmount }
+
+// holding reports whether the authorization currently reserves funds.
+func (a *Authorization) holding(now time.Time) bool {
+	return a.Status == AuthOpen && a.expires.After(now)
+}
+
+// effectiveStatus is the status as of now, with lazy expiry applied.
+func (a *Authorization) effectiveStatus(now time.Time) string {
+	if a.Status == AuthOpen && !a.expires.After(now) {
+		return AuthExpired
+	}
+	return a.Status
+}
+
 // Data is the complete serialisable service state; it is the export format.
 type Data struct {
-	Currency    string               `json:"currency"`
-	MinorUnits  int                  `json:"minor_units"`
-	Users       []*User              `json:"users"`
-	Tokens      map[string]string    `json:"tokens"`
-	Payments    []*Payment           `json:"payments"`
-	Requests    []*Request           `json:"requests"`
-	Splits      []*Split             `json:"splits"`
-	Settlements []*Settlement        `json:"settlements"`
-	Idempotency []*IdempotencyRecord `json:"idempotency"`
-	Operators   []string             `json:"operators"`
-	Counters    map[string]int64     `json:"counters"`
+	Currency       string               `json:"currency"`
+	MinorUnits     int                  `json:"minor_units"`
+	AuthTTL        int                  `json:"authorization_ttl_seconds"`
+	Users          []*User              `json:"users"`
+	Tokens         map[string]string    `json:"tokens"`
+	Payments       []*Payment           `json:"payments"`
+	Requests       []*Request           `json:"requests"`
+	Splits         []*Split             `json:"splits"`
+	Settlements    []*Settlement        `json:"settlements"`
+	Authorizations []*Authorization     `json:"authorizations"`
+	Idempotency    []*IdempotencyRecord `json:"idempotency"`
+	Operators      []string             `json:"operators"`
+	Counters       map[string]int64     `json:"counters"`
 }
 
 // state is Data plus lookup indexes derived from it.
@@ -119,6 +170,7 @@ type state struct {
 	requestsByID  map[string]*Request
 	splitsByID    map[string]*Split
 	settlements   map[string]*Settlement
+	authzByID     map[string]*Authorization
 	idem          map[string]*IdempotencyRecord
 	operators     map[string]bool
 }
@@ -143,6 +195,12 @@ func newState(d Data) (*state, error) {
 	if !validMinorUnits(d.MinorUnits) {
 		return nil, apierr.Invalid("minor_units must be 0, 2 or 3")
 	}
+	if d.AuthTTL == 0 {
+		d.AuthTTL = DefaultAuthorizationTTL
+	}
+	if d.AuthTTL < 0 || d.AuthTTL > MaxAuthorizationTTL {
+		return nil, apierr.Invalid("authorization_ttl_seconds must be a positive integer")
+	}
 	if d.Tokens == nil {
 		d.Tokens = map[string]string{}
 	}
@@ -158,6 +216,7 @@ func newState(d Data) (*state, error) {
 		requestsByID:  map[string]*Request{},
 		splitsByID:    map[string]*Split{},
 		settlements:   map[string]*Settlement{},
+		authzByID:     map[string]*Authorization{},
 		idem:          map[string]*IdempotencyRecord{},
 		operators:     map[string]bool{},
 	}
@@ -211,6 +270,14 @@ func newState(d Data) (*state, error) {
 			}
 		}
 		st.settlements[s.ID] = s
+	}
+	for _, a := range d.Authorizations {
+		if err := st.indexAuthorization(a); err != nil {
+			return nil, err
+		}
+	}
+	if err := st.checkHolds(time.Now()); err != nil {
+		return nil, err
 	}
 	for _, rec := range d.Idempotency {
 		if rec == nil || rec.Key == "" || !json.Valid(rec.Response) {
@@ -282,6 +349,10 @@ func (st *state) newSplitID() string {
 	return st.nextID("sp", func(id string) bool { return st.splitsByID[id] != nil })
 }
 
+func (st *state) newAuthorizationID() string {
+	return st.nextID("a", func(id string) bool { return st.authzByID[id] != nil })
+}
+
 func (st *state) newSettlementID() string {
 	return st.nextID("st", func(id string) bool { return st.settlements[id] != nil })
 }
@@ -302,4 +373,52 @@ func DerivedHandle(email string) string {
 		h = h[:20]
 	}
 	return h
+}
+
+// MaxAuthorizationTTL bounds the fixture lifetime (ten years) so expiry
+// arithmetic cannot overflow.
+const MaxAuthorizationTTL = 10 * 365 * 24 * 3600
+
+func (st *state) indexAuthorization(a *Authorization) error {
+	if a == nil || a.ID == "" || st.authzByID[a.ID] != nil {
+		return apierr.Invalid("authorization ids must be non-empty and unique")
+	}
+	if st.usersByID[a.FromID] == nil || st.usersByID[a.ToID] == nil || a.FromID == a.ToID {
+		return apierr.Invalid("authorization %s has invalid parties", a.ID)
+	}
+	if a.Amount < 1 || a.Amount > money.MaxSafe || a.CapturedAmount < 0 || a.CapturedAmount > a.Amount || !validVisibility(a.Visibility) {
+		return apierr.Invalid("authorization %s has an invalid amount or visibility", a.ID)
+	}
+	switch a.Status {
+	case AuthOpen, AuthCaptured, AuthVoided, AuthExpired:
+	default:
+		return apierr.Invalid("authorization %s has an invalid status", a.ID)
+	}
+	expires, err := time.Parse(time.RFC3339, a.ExpiresAt)
+	if err != nil {
+		return apierr.Invalid("authorization %s has an invalid expires_at", a.ID)
+	}
+	a.expires = expires
+	if a.PaymentIDs == nil {
+		a.PaymentIDs = []string{}
+	}
+	st.authzByID[a.ID] = a
+	return nil
+}
+
+// checkHolds rejects a state in which some wallet has more reserved than
+// it owns.
+func (st *state) checkHolds(now time.Time) error {
+	held := map[string]int64{}
+	for _, a := range st.Authorizations {
+		if a.holding(now) {
+			held[a.FromID] += a.remaining()
+		}
+	}
+	for id, h := range held {
+		if h > st.usersByID[id].Balance {
+			return apierr.Invalid("open authorizations of %s exceed the balance", id)
+		}
+	}
+	return nil
 }

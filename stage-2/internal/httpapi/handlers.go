@@ -100,7 +100,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var token string
 	err = s.store.Update(func(tx *store.Tx) error {
 		var terr error
-		token, terr = tx.IssueToken(creds.UserID)
+		token, terr = tx.IssueToken(creds.UserID, creds.Hash)
 		return terr
 	})
 	if err != nil {
@@ -110,11 +110,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, store.Session{UserID: creds.UserID, DisplayName: creds.DisplayName, Token: token})
 }
 
-func (s *Server) me(w http.ResponseWriter, r *http.Request, caller string) {
+func (s *Server) me(w http.ResponseWriter, r *http.Request, sess session) {
 	var view store.MeView
-	err := s.store.View(func(tx *store.Tx) error {
+	err := s.view(sess, func(tx *store.Tx) error {
 		var merr error
-		view, merr = tx.Me(caller)
+		view, merr = tx.Me(sess.userID)
 		return merr
 	})
 	if err != nil {
@@ -135,9 +135,10 @@ type idempotentWrite struct {
 
 func (s *Server) idempotent(op idempotentWrite) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		caller, err := s.authenticate(r)
+		sess, err := s.authenticate(r)
+		caller := sess.userID
 		if err == nil && op.gate != nil {
-			err = s.store.View(func(tx *store.Tx) error { return op.gate(tx, caller) })
+			err = s.view(sess, func(tx *store.Tx) error { return op.gate(tx, caller) })
 		}
 		if err != nil {
 			writeError(w, err)
@@ -155,7 +156,7 @@ func (s *Server) idempotent(op idempotentWrite) http.HandlerFunc {
 		}
 		var resp []byte
 		var replayed bool
-		err = s.store.Update(func(tx *store.Tx) error {
+		err = s.update(sess, func(tx *store.Tx) error {
 			var ierr error
 			resp, replayed, ierr = tx.Idempotent(caller, r.URL.Path, key, fingerprint(body), func() (any, error) {
 				return op.run(tx, caller, body, r)
@@ -232,19 +233,19 @@ func (s *Server) settle(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) declineRequest(w http.ResponseWriter, r *http.Request, caller string) {
-	s.closeRequest(w, r, caller, (*store.Tx).Decline)
+func (s *Server) declineRequest(w http.ResponseWriter, r *http.Request, sess session) {
+	s.closeRequest(w, r, sess, (*store.Tx).Decline)
 }
 
-func (s *Server) cancelRequest(w http.ResponseWriter, r *http.Request, caller string) {
-	s.closeRequest(w, r, caller, (*store.Tx).Cancel)
+func (s *Server) cancelRequest(w http.ResponseWriter, r *http.Request, sess session) {
+	s.closeRequest(w, r, sess, (*store.Tx).Cancel)
 }
 
-func (s *Server) closeRequest(w http.ResponseWriter, r *http.Request, caller string, op func(*store.Tx, string, string) (store.RequestView, error)) {
+func (s *Server) closeRequest(w http.ResponseWriter, r *http.Request, sess session, op func(*store.Tx, string, string) (store.RequestView, error)) {
 	var view store.RequestView
-	err := s.store.Update(func(tx *store.Tx) error {
+	err := s.update(sess, func(tx *store.Tx) error {
 		var oerr error
-		view, oerr = op(tx, caller, r.PathValue("id"))
+		view, oerr = op(tx, sess.userID, r.PathValue("id"))
 		return oerr
 	})
 	if err != nil {
@@ -254,7 +255,7 @@ func (s *Server) closeRequest(w http.ResponseWriter, r *http.Request, caller str
 	writeJSON(w, http.StatusOK, view)
 }
 
-func (s *Server) listRequests(w http.ResponseWriter, r *http.Request, caller string) {
+func (s *Server) listRequests(w http.ResponseWriter, r *http.Request, sess session) {
 	q := r.URL.Query()
 	var f store.RequestFilter
 	f.Direction = q.Get("direction")
@@ -278,14 +279,18 @@ func (s *Server) listRequests(w http.ResponseWriter, r *http.Request, caller str
 	}
 	var items []store.RequestView
 	var more bool
-	_ = s.store.View(func(tx *store.Tx) error {
-		items, more = tx.ListRequests(caller, f, pg)
+	err = s.view(sess, func(tx *store.Tx) error {
+		items, more = tx.ListRequests(sess.userID, f, pg)
 		return nil
 	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"requests": items, "has_more": more})
 }
 
-func (s *Server) activity(w http.ResponseWriter, r *http.Request, caller string) {
+func (s *Server) activity(w http.ResponseWriter, r *http.Request, sess session) {
 	pg, err := parsePage(r.URL.Query())
 	if err != nil {
 		writeError(w, err)
@@ -293,9 +298,13 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request, caller string)
 	}
 	var items []store.PaymentView
 	var more bool
-	_ = s.store.View(func(tx *store.Tx) error {
-		items, more = tx.Activity(caller, pg)
+	err = s.view(sess, func(tx *store.Tx) error {
+		items, more = tx.Activity(sess.userID, pg)
 		return nil
 	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"payments": items, "has_more": more})
 }

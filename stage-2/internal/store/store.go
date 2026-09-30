@@ -5,6 +5,7 @@ package store
 import (
 	"encoding/json"
 	"sync"
+	"time"
 
 	"pocketful/internal/apierr"
 )
@@ -18,7 +19,8 @@ type Store struct {
 // Tx is the handle to the state while the store lock is held. Write
 // methods must only be used inside Update.
 type Tx struct {
-	st *state
+	st  *state
+	now time.Time
 }
 
 // New returns a store with an empty EUR state.
@@ -34,14 +36,14 @@ func New() *Store {
 func (s *Store) Update(fn func(tx *Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return fn(&Tx{st: s.st})
+	return fn(&Tx{st: s.st, now: time.Now().UTC()})
 }
 
 // View runs fn with shared read-only access to the state.
 func (s *Store) View(fn func(tx *Tx) error) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return fn(&Tx{st: s.st})
+	return fn(&Tx{st: s.st, now: time.Now().UTC()})
 }
 
 func (s *Store) replace(st *state) {

@@ -13,6 +13,9 @@ type MeView struct {
 	DisplayName string `json:"display_name"`
 	Handle      string `json:"handle"`
 	Balance     int64  `json:"balance"`
+	Total       int64  `json:"total"`
+	Available   int64  `json:"available"`
+	Held        int64  `json:"held"`
 	Currency    string `json:"currency"`
 	MinorUnits  int    `json:"minor_units"`
 }
@@ -62,7 +65,12 @@ func (tx *Tx) Me(userID string) (MeView, error) {
 	if err != nil {
 		return MeView{}, err
 	}
-	return MeView{UserID: u.ID, DisplayName: u.DisplayName, Handle: u.Handle, Balance: u.Balance, Currency: tx.st.Currency, MinorUnits: tx.st.MinorUnits}, nil
+	held := tx.held(u.ID)
+	return MeView{
+		UserID: u.ID, DisplayName: u.DisplayName, Handle: u.Handle,
+		Balance: u.Balance, Total: u.Balance, Available: u.Balance - held, Held: held,
+		Currency: tx.st.Currency, MinorUnits: tx.st.MinorUnits,
+	}, nil
 }
 
 // Signup creates an account with the given password hash and a first token.
@@ -97,10 +105,29 @@ func (tx *Tx) CredentialsFor(email string) (Credentials, bool) {
 	return Credentials{UserID: u.ID, DisplayName: u.DisplayName, Hash: u.PasswordHash}, true
 }
 
-// IssueToken adds a new session token for an existing user.
-func (tx *Tx) IssueToken(userID string) (string, error) {
-	if _, err := tx.user(userID); err != nil {
+// Verify checks that the token still belongs to userID. Writes call it
+// inside their own critical section so a reset or import that slipped in
+// after authentication cannot redirect the write to another user.
+func (tx *Tx) Verify(token, userID string) error {
+	uid, err := tx.Authenticate(token)
+	if err != nil {
+		return err
+	}
+	if uid != userID {
+		return apierr.Unauthenticated("session is no longer valid")
+	}
+	return nil
+}
+
+// IssueToken adds a new session token for a user whose credentials were
+// verified against passwordHash. It fails if the account changed since.
+func (tx *Tx) IssueToken(userID, passwordHash string) (string, error) {
+	u, err := tx.user(userID)
+	if err != nil {
 		return "", err
+	}
+	if u.PasswordHash != passwordHash {
+		return "", apierr.Unauthenticated("wrong email or password")
 	}
 	token, err := newToken()
 	if err != nil {

@@ -42,13 +42,17 @@ func New(s *store.Store) http.Handler {
 	route("/auth/login", map[string]http.HandlerFunc{"POST": srv.login})
 	route("/me", map[string]http.HandlerFunc{"GET": srv.authed(srv.me)})
 	route("/payments", map[string]http.HandlerFunc{"POST": srv.sendPayment})
-	route("/requests", map[string]http.HandlerFunc{"POST": srv.createRequest, "GET": srv.authed(srv.listRequests)})
+	route("/requests", map[string]http.HandlerFunc{"POST": srv.createRequest, "GET": negotiate(srv.authed(srv.listRequests))})
 	route("/requests/{id}/pay", map[string]http.HandlerFunc{"POST": srv.payRequest})
 	route("/requests/{id}/decline", map[string]http.HandlerFunc{"POST": srv.authed(srv.declineRequest)})
 	route("/requests/{id}/cancel", map[string]http.HandlerFunc{"POST": srv.authed(srv.cancelRequest)})
 	route("/splits", map[string]http.HandlerFunc{"POST": srv.createSplit})
 	route("/activity", map[string]http.HandlerFunc{"GET": srv.authed(srv.activity)})
 	route("/settlements", map[string]http.HandlerFunc{"POST": srv.settle})
+	route("/authorizations", map[string]http.HandlerFunc{"POST": srv.createAuthorization, "GET": negotiate(srv.authed(srv.listAuthorizations))})
+	route("/authorizations/{id}/capture", map[string]http.HandlerFunc{"POST": srv.capture})
+	route("/authorizations/{id}/void", map[string]http.HandlerFunc{"POST": srv.authed(srv.voidAuthorization)})
+	registerPages(route)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, apierr.NotFound("no such route"))
 	})
@@ -115,29 +119,58 @@ func bearerToken(r *http.Request) (string, error) {
 	return token, nil
 }
 
-// authenticate resolves the caller's user id from the bearer token.
-func (s *Server) authenticate(r *http.Request) (string, error) {
-	token, err := bearerToken(r)
-	if err != nil {
-		return "", err
-	}
-	var uid string
-	err = s.store.View(func(tx *store.Tx) error {
-		var aerr error
-		uid, aerr = tx.Authenticate(token)
-		return aerr
-	})
-	return uid, err
+// session is an authenticated caller: the bearer token and the user it
+// resolved to when the request arrived.
+type session struct {
+	token  string
+	userID string
 }
 
-// authed wraps a handler that only needs the caller's id.
-func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, caller string)) http.HandlerFunc {
+// authenticate resolves the caller from the bearer token.
+func (s *Server) authenticate(r *http.Request) (session, error) {
+	token, err := bearerToken(r)
+	if err != nil {
+		return session{}, err
+	}
+	sess := session{token: token}
+	err = s.store.View(func(tx *store.Tx) error {
+		var aerr error
+		sess.userID, aerr = tx.Authenticate(token)
+		return aerr
+	})
+	return sess, err
+}
+
+// update runs fn under the write lock after re-checking the session inside
+// the same critical section, so a reset or import between authentication
+// and the write cannot redirect the write to another user.
+func (s *Server) update(sess session, fn func(tx *store.Tx) error) error {
+	return s.store.Update(func(tx *store.Tx) error {
+		if err := tx.Verify(sess.token, sess.userID); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
+
+// view is update for read-only work under the read lock.
+func (s *Server) view(sess session, fn func(tx *store.Tx) error) error {
+	return s.store.View(func(tx *store.Tx) error {
+		if err := tx.Verify(sess.token, sess.userID); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
+
+// authed wraps a handler that only needs the caller's session.
+func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, sess session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		caller, err := s.authenticate(r)
+		sess, err := s.authenticate(r)
 		if err != nil {
 			writeError(w, err)
 			return
 		}
-		h(w, r, caller)
+		h(w, r, sess)
 	}
 }

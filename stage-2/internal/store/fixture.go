@@ -12,12 +12,14 @@ import (
 
 // Fixture is the body of POST /_test/reset.
 type Fixture struct {
-	Currency              string           `json:"currency"`
-	MinorUnits            *int             `json:"minor_units"`
-	Users                 []FixtureUser    `json:"users"`
-	Payments              []FixturePayment `json:"payments"`
-	Requests              []FixtureRequest `json:"requests"`
-	SettlementOperatorIDs []string         `json:"settlement_operator_ids"`
+	Currency              string                 `json:"currency"`
+	MinorUnits            *int                   `json:"minor_units"`
+	Users                 []FixtureUser          `json:"users"`
+	Payments              []FixturePayment       `json:"payments"`
+	Requests              []FixtureRequest       `json:"requests"`
+	SettlementOperatorIDs []string               `json:"settlement_operator_ids"`
+	AuthorizationTTL      *json.Number           `json:"authorization_ttl_seconds"`
+	Authorizations        []FixtureAuthorization `json:"authorizations"`
 }
 
 // FixtureUser is a seeded user with a plaintext password.
@@ -88,7 +90,10 @@ func (f Fixture) toData() (Data, error) {
 	if f.MinorUnits != nil {
 		d.MinorUnits = *f.MinorUnits
 	}
-	created := now()
+	created := formatTime(time.Now())
+	if err := f.applyAuthorizations(&d, created); err != nil {
+		return Data{}, err
+	}
 	for _, fu := range f.Users {
 		bal, err := fixtureInt(fu.Balance, "user balance")
 		if err != nil {
@@ -101,7 +106,9 @@ func (f Fixture) toData() (Data, error) {
 		// PasswordHash holds the plaintext until hashUsers runs.
 		d.Users = append(d.Users, &User{ID: fu.ID, Email: fu.Email, DisplayName: fu.DisplayName, Handle: h, PasswordHash: fu.Password, Balance: bal})
 	}
-	hashUsers(d.Users)
+	if err := hashUsers(d.Users); err != nil {
+		return Data{}, err
+	}
 	for _, fp := range f.Payments {
 		amt, err := fixtureInt(fp.Amount, "payment amount")
 		if err != nil {
@@ -128,9 +135,13 @@ func (f Fixture) toData() (Data, error) {
 }
 
 // hashUsers replaces each user's plaintext password with its hash. A user
-// without a password gets an empty hash and cannot log in.
-func hashUsers(users []*User) {
-	var wg sync.WaitGroup
+// without a password keeps an empty hash and cannot log in.
+func hashUsers(users []*User) error {
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		firstErr error
+	)
 	sem := make(chan struct{}, 8)
 	for _, u := range users {
 		if u == nil || u.PasswordHash == "" {
@@ -143,12 +154,18 @@ func hashUsers(users []*User) {
 			defer func() { <-sem }()
 			h, err := password.Hash(u.PasswordHash)
 			if err != nil {
-				h = ""
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+				return
 			}
 			u.PasswordHash = h
 		}()
 	}
 	wg.Wait()
+	return firstErr
 }
 
 func orDefault(v, fallback string) string {
@@ -158,4 +175,10 @@ func orDefault(v, fallback string) string {
 	return v
 }
 
-func now() string { return time.Now().UTC().Format("2006-01-02T15:04:05-07:00") }
+const timeLayout = "2006-01-02T15:04:05-07:00"
+
+func formatTime(t time.Time) string { return t.UTC().Format(timeLayout) }
+
+// stamp is the current time as an API timestamp. It is truncated to whole
+// seconds so a printed created_at + ttl is exactly the printed expires_at.
+func (tx *Tx) stamp() string { return formatTime(tx.now) }

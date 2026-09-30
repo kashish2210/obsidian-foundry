@@ -46,7 +46,7 @@ func (tx *Tx) CreateSplit(callerID string, in SplitInput) (SplitView, error) {
 			return SplitView{}, apierr.NotFound("no user has handle %q", h)
 		}
 	}
-	created := now()
+	created := tx.stamp()
 	amounts := EqualShares(in.Amount, len(participants))
 	sp := &Split{ID: tx.st.newSplitID(), CallerID: callerID, Amount: in.Amount, Note: in.Note, CreatedAt: created, RequestIDs: []string{}}
 	view := SplitView{Amount: in.Amount, Currency: tx.st.Currency, Note: in.Note, Requests: []RequestView{}, CreatedAt: created}

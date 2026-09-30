@@ -48,7 +48,7 @@ func (tx *Tx) Settle(transfers []Transfer) (SettlementView, error) {
 		net[t.to] += t.Amount
 	}
 	for u, delta := range net {
-		if u.Balance+delta < 0 {
+		if tx.available(u)+delta < 0 {
 			return SettlementView{}, apierr.Conflict("insufficient_funds", "settlement is not affordable")
 		}
 		if delta > 0 {
@@ -57,12 +57,12 @@ func (tx *Tx) Settle(transfers []Transfer) (SettlementView, error) {
 			}
 		}
 	}
-	committed := now()
+	committed := tx.stamp()
 	id := tx.st.newSettlementID()
 	rec := &Settlement{ID: id, CommittedAt: committed, PaymentIDs: []string{}}
 	view := SettlementView{SettlementID: id, CommittedAt: committed, Payments: []PaymentView{}}
 	for _, t := range resolved {
-		p := tx.transfer(t.from, t.to, t.Amount, t.Note, t.Visibility, nil, &id, committed)
+		p := tx.transfer(t.from, t.to, t.Amount, t.Note, t.Visibility, links{settlementID: &id}, committed)
 		rec.PaymentIDs = append(rec.PaymentIDs, p.ID)
 		view.Payments = append(view.Payments, tx.paymentView(p))
 	}

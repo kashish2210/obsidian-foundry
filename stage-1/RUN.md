@@ -10,4 +10,4 @@ Health: `curl http://localhost:8080/health`
 
 ## Acceptance suite
 
-<!-- tester: one-line run command goes here -->
+`cd acceptance && BASE_URL=http://localhost:8080 go test -count=1 ./...`

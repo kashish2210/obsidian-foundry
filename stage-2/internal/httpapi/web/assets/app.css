@@ -172,7 +172,7 @@ input:focus-visible, select:focus-visible { outline: 3px solid #0b63ce; outline-
 .dir-icon.out { background: var(--info-bg); color: var(--info); }
 .dir-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 650; background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
-.badge svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.row-meta svg, .badge svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .badge.pending, .badge.open { background: var(--warn-bg); color: var(--warn); border-color: #ecd28a; }
 .badge.paid, .badge.captured { background: var(--ok-bg); color: var(--ok); border-color: #b5dcc3; }
 .badge.declined, .badge.cancelled, .badge.voided, .badge.expired { background: #eceff2; color: #46505c; }

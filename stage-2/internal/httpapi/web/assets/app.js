@@ -533,9 +533,9 @@
     let seq = 0;
 
     function showError(text) {
-      errorSlot.replaceChildren(text
-        ? h('div', { class: 'alert alert-error', role: 'alert', 'data-testid': 'request-error' }, text)
-        : null);
+      errorSlot.replaceChildren(...(text
+        ? [h('div', { class: 'alert alert-error', role: 'alert', 'data-testid': 'request-error' }, text)]
+        : []));
     }
 
     async function refresh() {
@@ -716,9 +716,9 @@
     let seq = 0;
 
     function showError(text) {
-      errorSlot.replaceChildren(text
-        ? h('div', { class: 'alert alert-error', role: 'alert', 'data-testid': 'authorization-error' }, text)
-        : null);
+      errorSlot.replaceChildren(...(text
+        ? [h('div', { class: 'alert alert-error', role: 'alert', 'data-testid': 'authorization-error' }, text)]
+        : []));
     }
 
     async function refresh() {
@@ -794,7 +794,7 @@
       const meta = [
         h('span', { class: `badge ${a.status}` }, STATUS[a.status]),
         h('span', { class: `badge ${a.visibility}` }, icon(a.visibility === 'private' ? 'lock' : 'globe'), a.visibility === 'private' ? 'Private' : 'Public'),
-        h('span', null, icon('clock'), ` ${open ? 'Expires' : 'Expired'} ${humanTime(a.expires_at)} `),
+        h('span', null, icon('clock'), ` ${a.status === 'expired' ? 'Expired' : 'Expires'} ${humanTime(a.expires_at)} `),
         h('time', { datetime: a.expires_at, 'data-testid': `authorization-expires-${id}` }, a.expires_at),
       ];
       const progress = [];

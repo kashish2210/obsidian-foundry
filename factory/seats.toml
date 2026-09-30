@@ -1,0 +1,26 @@
+# One entry per BAND seat. Mandates stay GENERIC (hackathon rule):
+# no track names, endpoints or field names in any mandate file.
+
+[[seat]]
+name     = "planner"
+mandate  = "mandates/planner.md"
+harness  = "TBD"   # e.g. claude-code / codex
+model    = "TBD"
+
+[[seat]]
+name     = "builder"
+mandate  = "mandates/builder.md"
+harness  = "TBD"
+model    = "TBD"
+
+[[seat]]
+name     = "reviewer"
+mandate  = "mandates/reviewer.md"
+harness  = "TBD"
+model    = "TBD"
+
+[[seat]]
+name     = "verifier"
+mandate  = "mandates/verifier.md"
+harness  = "TBD"
+model    = "TBD"

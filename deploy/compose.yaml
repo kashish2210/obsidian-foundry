@@ -1,0 +1,9 @@
+services:
+  service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        STAGE: stage-1
+    ports:
+      - "8080:8080"

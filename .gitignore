@@ -1,0 +1,34 @@
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# --- Rust (oracle) ---
+/oracle/target/
+**/*.rs.bk
+
+# --- Go (stage services) ---
+/stages/**/bin/
+*.exe
+*.test
+*.out
+coverage.*
+# vendor/ is COMMITTED on purpose: the service must build with no outbound network
+
+# --- runtime / local state ---
+*.db
+*.db-journal
+*.sqlite
+*.log
+tmp/
+.env
+.env.*
+!.env.example
+
+# --- factory run artifacts ---
+/factory/runs/
+/recordings/

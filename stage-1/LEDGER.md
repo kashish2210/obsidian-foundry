@@ -152,4 +152,4 @@ unlikely to probe. Ids are stable across stages; later stages append.
 
 ## Notes (rejections and fixes)
 
-_None yet._
+- Rejection 1 (reviewer, rev 76a3bc7): gates 1-4 passed (host-mode shipped checks 147 passed, acceptance 119/119 in an internal-network, 2 CPU / 2 GiB container). Gate 5 failed. (a) acceptance/COVERAGE.md was never committed because the root .gitignore `coverage.*` matches it case-insensitively, so R5-R7, R9, R10, R21, R38 and R60 had no committed reason. (b) R26 and R41-R44 were exercised but never named in the suite. Owner: tester. Fix: force-add COVERAGE.md and map R26/R41-R44 to their tests.

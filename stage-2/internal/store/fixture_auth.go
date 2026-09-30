@@ -1,26 +1,24 @@
 package store
 
 import (
-	"encoding/json"
-
 	"pocketful/internal/apierr"
 	"pocketful/internal/money"
 )
 
 // FixtureAuthorization is a seeded authorization in any status.
 type FixtureAuthorization struct {
-	ID             string      `json:"id"`
-	FromUserID     string      `json:"from_user_id"`
-	ToUserID       string      `json:"to_user_id"`
-	Amount         json.Number `json:"amount"`
-	CapturedAmount json.Number `json:"captured_amount"`
-	Note           string      `json:"note"`
-	Visibility     string      `json:"visibility"`
-	Status         string      `json:"status"`
-	ExpiresAt      string      `json:"expires_at"`
-	PaymentID      *string     `json:"payment_id"`
-	PaymentIDs     []string    `json:"payment_ids"`
-	CreatedAt      string      `json:"created_at"`
+	ID             string   `json:"id"`
+	FromUserID     string   `json:"from_user_id"`
+	ToUserID       string   `json:"to_user_id"`
+	Amount         Number   `json:"amount"`
+	CapturedAmount Number   `json:"captured_amount"`
+	Note           string   `json:"note"`
+	Visibility     string   `json:"visibility"`
+	Status         string   `json:"status"`
+	ExpiresAt      string   `json:"expires_at"`
+	PaymentID      *string  `json:"payment_id"`
+	PaymentIDs     []string `json:"payment_ids"`
+	CreatedAt      string   `json:"created_at"`
 }
 
 func (fa FixtureAuthorization) toAuthorization(created string) (*Authorization, error) {

@@ -1,9 +1,9 @@
-# Pocketful stage 1 — run
+# Pocketful stage 2 — run
 
 Build and start (no manual setup, no network needed at run time):
 
 ```
-docker build -t pocketful-s1 . && docker run --rm -e PORT=8080 -p 8080:8080 pocketful-s1
+docker build -t pocketful-s2 . && docker run --rm -e PORT=8080 -p 8080:8080 pocketful-s2
 ```
 
 Health: `curl http://localhost:8080/health`

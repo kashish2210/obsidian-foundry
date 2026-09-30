@@ -1,7 +1,7 @@
 package store
 
 import (
-	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -9,6 +9,25 @@ import (
 	"pocketful/internal/money"
 	"pocketful/internal/password"
 )
+
+// Number is a JSON number literal. Unlike json.Number it refuses strings,
+// so a fixture cannot smuggle in "600" where a number is required.
+type Number string
+
+func (n Number) String() string { return string(n) }
+
+// UnmarshalJSON accepts only number literals; null leaves the field empty.
+func (n *Number) UnmarshalJSON(b []byte) error {
+	switch {
+	case string(b) == "null":
+		*n = ""
+	case len(b) > 0 && (b[0] == '-' || b[0] >= '0' && b[0] <= '9'):
+		*n = Number(b)
+	default:
+		return fmt.Errorf("expected a number, got %s", b)
+	}
+	return nil
+}
 
 // Fixture is the body of POST /_test/reset.
 type Fixture struct {
@@ -18,42 +37,42 @@ type Fixture struct {
 	Payments              []FixturePayment       `json:"payments"`
 	Requests              []FixtureRequest       `json:"requests"`
 	SettlementOperatorIDs []string               `json:"settlement_operator_ids"`
-	AuthorizationTTL      *json.Number           `json:"authorization_ttl_seconds"`
+	AuthorizationTTL      *Number                `json:"authorization_ttl_seconds"`
 	Authorizations        []FixtureAuthorization `json:"authorizations"`
 }
 
 // FixtureUser is a seeded user with a plaintext password.
 type FixtureUser struct {
-	ID          string      `json:"id"`
-	Email       string      `json:"email"`
-	Password    string      `json:"password"`
-	DisplayName string      `json:"display_name"`
-	Handle      string      `json:"handle"`
-	Balance     json.Number `json:"balance"`
+	ID          string `json:"id"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	DisplayName string `json:"display_name"`
+	Handle      string `json:"handle"`
+	Balance     Number `json:"balance"`
 }
 
 // FixturePayment is a seeded payment; it never touches balances.
 type FixturePayment struct {
-	ID         string      `json:"id"`
-	FromUserID string      `json:"from_user_id"`
-	ToUserID   string      `json:"to_user_id"`
-	Amount     json.Number `json:"amount"`
-	Note       string      `json:"note"`
-	Visibility string      `json:"visibility"`
-	RequestID  *string     `json:"request_id"`
-	CreatedAt  string      `json:"created_at"`
+	ID         string  `json:"id"`
+	FromUserID string  `json:"from_user_id"`
+	ToUserID   string  `json:"to_user_id"`
+	Amount     Number  `json:"amount"`
+	Note       string  `json:"note"`
+	Visibility string  `json:"visibility"`
+	RequestID  *string `json:"request_id"`
+	CreatedAt  string  `json:"created_at"`
 }
 
 // FixtureRequest is a seeded request in any status.
 type FixtureRequest struct {
-	ID          string      `json:"id"`
-	RequesterID string      `json:"requester_id"`
-	PayerID     string      `json:"payer_id"`
-	Amount      json.Number `json:"amount"`
-	Note        string      `json:"note"`
-	Status      string      `json:"status"`
-	PaymentID   *string     `json:"payment_id"`
-	CreatedAt   string      `json:"created_at"`
+	ID          string  `json:"id"`
+	RequesterID string  `json:"requester_id"`
+	PayerID     string  `json:"payer_id"`
+	Amount      Number  `json:"amount"`
+	Note        string  `json:"note"`
+	Status      string  `json:"status"`
+	PaymentID   *string `json:"payment_id"`
+	CreatedAt   string  `json:"created_at"`
 }
 
 // Reset replaces all state with the fixture. The store is unchanged when
@@ -71,7 +90,7 @@ func (s *Store) Reset(f Fixture) error {
 	return nil
 }
 
-func fixtureInt(n json.Number, what string) (int64, error) {
+func fixtureInt(n Number, what string) (int64, error) {
 	if n == "" {
 		return 0, nil
 	}

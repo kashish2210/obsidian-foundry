@@ -11,7 +11,7 @@ and rounding.
 
 ## Demo video
 
-<!-- VIDEO: replace this line with the video link or embed -->
+https://github.com/user-attachments/assets/069e0398-ac7f-43ed-9f2c-209588325ef1
 
 ## Demo users
 

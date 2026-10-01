@@ -21,7 +21,7 @@ type FixtureAuthorization struct {
 	CreatedAt      string   `json:"created_at"`
 }
 
-func (fa FixtureAuthorization) toAuthorization(created string) (*Authorization, error) {
+func (fa FixtureAuthorization) toAuthorization(reset Instant) (*Authorization, error) {
 	amount, err := fixtureInt(fa.Amount, "authorization amount")
 	if err != nil {
 		return nil, err
@@ -42,16 +42,34 @@ func (fa FixtureAuthorization) toAuthorization(created string) (*Authorization, 
 	if len(ids) == 0 && fa.PaymentID != nil {
 		ids = append(ids, *fa.PaymentID)
 	}
-	return &Authorization{
+	expires, err := ParseInstant(fa.ExpiresAt)
+	if err != nil {
+		return nil, apierr.Invalid("authorization expires_at must be an RFC 3339 instant with an offset")
+	}
+	created, err := seededInstant(fa.CreatedAt, reset, "authorization created_at")
+	if err != nil {
+		return nil, err
+	}
+	a := &Authorization{
 		ID: fa.ID, FromID: fa.FromUserID, ToID: fa.ToUserID, Amount: amount,
 		CapturedAmount: captured, Note: fa.Note, Visibility: vis, Status: status,
-		ExpiresAt: fa.ExpiresAt, PaymentIDs: ids, CreatedAt: orDefault(fa.CreatedAt, created),
-	}, nil
+		ExpiresAt: expires, PaymentIDs: ids, CreatedAt: created,
+	}
+	if status != AuthOpen {
+		// A seeded closed hold has no lifecycle to reconstruct: it closed
+		// at reset, or at its deadline if that already passed.
+		closed := reset
+		if status == AuthExpired && !expires.T.After(reset.T) {
+			closed = expires
+		}
+		a.ClosedAt = &closed
+	}
+	return a, nil
 }
 
 // applyAuthorizations copies the fixture's ttl and seeded authorizations
 // into d.
-func (f Fixture) applyAuthorizations(d *Data, created string) error {
+func (f Fixture) applyAuthorizations(d *Data, reset Instant) error {
 	if f.AuthorizationTTL != nil {
 		ttl, ok := money.ParseIntegral(f.AuthorizationTTL.String())
 		if !ok || ttl < 1 || ttl > MaxAuthorizationTTL {
@@ -60,7 +78,7 @@ func (f Fixture) applyAuthorizations(d *Data, created string) error {
 		d.AuthTTL = int(ttl)
 	}
 	for _, fa := range f.Authorizations {
-		a, err := fa.toAuthorization(created)
+		a, err := fa.toAuthorization(reset)
 		if err != nil {
 			return err
 		}

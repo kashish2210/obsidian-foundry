@@ -183,7 +183,11 @@ input:focus-visible, select:focus-visible { outline: 3px solid #0b63ce; outline-
 
 /* Split preview */
 .preview { margin: 0 0 var(--s4); padding: var(--s3) var(--s4); background: var(--bg); border-radius: var(--radius-sm); border: 1px dashed #a9b3be; }
-.preview ul li { display: flex; justify-content: space-between; gap: var(--s3); padding: var(--s1) 0; }
+.preview ul li { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); padding: var(--s1) 0; }
+.preview .who { min-width: 0; overflow-wrap: anywhere; }
+.preview .you { display: block; color: var(--muted); font-size: 0.85rem; }
+.preview .share { flex: none; white-space: nowrap; }
+.raw-ts { flex-basis: 100%; color: var(--muted); font-size: 0.75rem; opacity: 0.85; overflow-wrap: anywhere; }
 .preview .total-line { border-top: 1px solid var(--line); margin-top: var(--s2); padding-top: var(--s2); font-weight: 650; }
 .preview-hint { color: var(--muted); font-size: 0.9rem; }
 .preview [data-testid^="split-share-"] { font-weight: 650; font-variant-numeric: tabular-nums; }

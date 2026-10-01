@@ -20,10 +20,11 @@ type AuthorizationView struct {
 	Note            string   `json:"note"`
 	Visibility      string   `json:"visibility"`
 	Status          string   `json:"status"`
-	ExpiresAt       string   `json:"expires_at"`
+	ExpiresAt       Instant  `json:"expires_at"`
 	PaymentID       *string  `json:"payment_id"`
 	PaymentIDs      []string `json:"payment_ids"`
-	CreatedAt       string   `json:"created_at"`
+	ClosedAt        *Instant `json:"closed_at"`
+	CreatedAt       Instant  `json:"created_at"`
 }
 
 // CaptureInput is a validated capture. A nil Amount means the whole
@@ -67,6 +68,7 @@ func (tx *Tx) authorizationView(a *Authorization) AuthorizationView {
 	if a.holding(tx.now) {
 		v.RemainingAmount = a.remaining()
 	}
+	v.ClosedAt = a.closedAt(tx.now)
 	if n := len(a.PaymentIDs); n > 0 {
 		v.PaymentID = &a.PaymentIDs[n-1]
 	}
@@ -89,12 +91,11 @@ func (tx *Tx) CreateAuthorization(callerID string, in PaymentInput) (Authorizati
 	if tx.available(caller) < in.Amount {
 		return AuthorizationView{}, apierr.Conflict("insufficient_funds", "available balance is below the amount")
 	}
-	created := tx.now.Truncate(time.Second)
-	expires := created.Add(time.Duration(tx.st.AuthTTL) * time.Second)
+	created := tx.stamp()
 	a := &Authorization{
 		ID: tx.st.newAuthorizationID(), FromID: caller.ID, ToID: to.ID, Amount: in.Amount,
 		Note: in.Note, Visibility: in.Visibility, Status: AuthOpen, PaymentIDs: []string{},
-		CreatedAt: formatTime(created), ExpiresAt: formatTime(expires), expires: expires,
+		CreatedAt: created, ExpiresAt: NewInstant(created.T.Add(time.Duration(tx.st.AuthTTL) * time.Second)),
 	}
 	tx.st.Authorizations = append(tx.st.Authorizations, a)
 	tx.st.authzByID[a.ID] = a
@@ -137,6 +138,8 @@ func (tx *Tx) Capture(callerID, authID string, in CaptureInput) (PaymentView, er
 	a.PaymentIDs = append(a.PaymentIDs, p.ID)
 	if in.Final || a.remaining() == 0 {
 		a.Status = AuthCaptured
+		closed := tx.stamp()
+		a.ClosedAt = &closed
 	}
 	return tx.paymentView(p), nil
 }
@@ -157,6 +160,8 @@ func (tx *Tx) Void(callerID, authID string) (AuthorizationView, error) {
 	case AuthVoided:
 	case AuthOpen:
 		a.Status = AuthVoided
+		closed := tx.stamp()
+		a.ClosedAt = &closed
 	default:
 		return AuthorizationView{}, apierr.Conflict("authorization_not_open", "authorization is %s", status)
 	}
@@ -190,4 +195,17 @@ func (tx *Tx) ListAuthorizations(callerID string, f AuthorizationFilter, pg Page
 		out = append(out, tx.authorizationView(a))
 	}
 	return out, more
+}
+
+// closedAt is when the authorization stopped holding funds: the event that
+// closed it, or its deadline once the clock has passed it; nil while open.
+func (a *Authorization) closedAt(now time.Time) *Instant {
+	if a.ClosedAt != nil {
+		return a.ClosedAt
+	}
+	if a.effectiveStatus(now) == AuthExpired {
+		at := a.ExpiresAt
+		return &at
+	}
+	return nil
 }

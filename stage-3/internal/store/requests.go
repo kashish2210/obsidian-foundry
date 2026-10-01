@@ -14,7 +14,7 @@ type RequestView struct {
 	Note            string  `json:"note"`
 	Status          string  `json:"status"`
 	PaymentID       *string `json:"payment_id"`
-	CreatedAt       string  `json:"created_at"`
+	CreatedAt       Instant `json:"created_at"`
 }
 
 // RequestInput is a validated new request.
@@ -40,7 +40,7 @@ func (tx *Tx) requestView(r *Request) RequestView {
 	}
 }
 
-func (tx *Tx) addRequest(requester, payer *User, amount int64, note, createdAt string) *Request {
+func (tx *Tx) addRequest(requester, payer *User, amount int64, note string, createdAt Instant) *Request {
 	r := &Request{
 		ID: tx.st.newRequestID(), RequesterID: requester.ID, PayerID: payer.ID,
 		Amount: amount, Note: note, Status: StatusPending, CreatedAt: createdAt,

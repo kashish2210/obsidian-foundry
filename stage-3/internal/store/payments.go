@@ -19,7 +19,7 @@ type PaymentView struct {
 	RequestID       *string `json:"request_id"`
 	SettlementID    *string `json:"settlement_id"`
 	AuthorizationID *string `json:"authorization_id"`
-	CreatedAt       string  `json:"created_at"`
+	CreatedAt       Instant `json:"created_at"`
 }
 
 // PaymentInput is a validated direct payment.
@@ -53,13 +53,14 @@ type links struct {
 
 // transfer moves money and records the payment. Callers must have checked
 // that from can afford amount.
-func (tx *Tx) transfer(from, to *User, amount int64, note, visibility string, l links, createdAt string) *Payment {
+func (tx *Tx) transfer(from, to *User, amount int64, note, visibility string, l links, createdAt Instant) *Payment {
 	from.Balance -= amount
 	to.Balance += amount
 	p := &Payment{
 		ID: tx.st.newPaymentID(), FromID: from.ID, ToID: to.ID, Amount: amount,
 		Note: note, Visibility: visibility, RequestID: l.requestID,
 		SettlementID: l.settlementID, AuthorizationID: l.authorizationID, CreatedAt: createdAt,
+		Revisions: []*Revision{{Revision: 1, Amount: amount, EffectiveAt: createdAt, RecordedAt: createdAt}},
 	}
 	tx.st.Payments = append(tx.st.Payments, p)
 	tx.st.paymentsByID[p.ID] = p

@@ -10,7 +10,7 @@ type SplitView struct {
 	Note      string        `json:"note"`
 	Shares    []Share       `json:"shares"`
 	Requests  []RequestView `json:"requests"`
-	CreatedAt string        `json:"created_at"`
+	CreatedAt Instant       `json:"created_at"`
 }
 
 // SplitInput is a validated split.

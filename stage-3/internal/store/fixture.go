@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -109,8 +110,8 @@ func (f Fixture) toData() (Data, error) {
 	if f.MinorUnits != nil {
 		d.MinorUnits = *f.MinorUnits
 	}
-	created := formatTime(time.Now())
-	if err := f.applyAuthorizations(&d, created); err != nil {
+	reset := NewInstant(time.Now())
+	if err := f.applyAuthorizations(&d, reset); err != nil {
 		return Data{}, err
 	}
 	for _, fu := range f.Users {
@@ -137,8 +138,14 @@ func (f Fixture) toData() (Data, error) {
 		if vis == "" {
 			vis = VisibilityPublic
 		}
-		d.Payments = append(d.Payments, &Payment{ID: fp.ID, FromID: fp.FromUserID, ToID: fp.ToUserID, Amount: amt, Note: fp.Note, Visibility: vis, RequestID: fp.RequestID, CreatedAt: orDefault(fp.CreatedAt, created)})
+		at, err := seededInstant(fp.CreatedAt, reset, "payment created_at")
+		if err != nil {
+			return Data{}, err
+		}
+		d.Payments = append(d.Payments, &Payment{ID: fp.ID, FromID: fp.FromUserID, ToID: fp.ToUserID, Amount: amt, Note: fp.Note, Visibility: vis, RequestID: fp.RequestID, CreatedAt: at})
 	}
+	// Oldest first, so later API payments always follow the seeded ones.
+	sort.SliceStable(d.Payments, func(i, j int) bool { return d.Payments[i].CreatedAt.T.Before(d.Payments[j].CreatedAt.T) })
 	for _, fr := range f.Requests {
 		amt, err := fixtureInt(fr.Amount, "request amount")
 		if err != nil {
@@ -148,7 +155,11 @@ func (f Fixture) toData() (Data, error) {
 		if status == "" {
 			status = StatusPending
 		}
-		d.Requests = append(d.Requests, &Request{ID: fr.ID, RequesterID: fr.RequesterID, PayerID: fr.PayerID, Amount: amt, Note: fr.Note, Status: status, PaymentID: fr.PaymentID, CreatedAt: orDefault(fr.CreatedAt, created)})
+		at, err := seededInstant(fr.CreatedAt, reset, "request created_at")
+		if err != nil {
+			return Data{}, err
+		}
+		d.Requests = append(d.Requests, &Request{ID: fr.ID, RequesterID: fr.RequesterID, PayerID: fr.PayerID, Amount: amt, Note: fr.Note, Status: status, PaymentID: fr.PaymentID, CreatedAt: at})
 	}
 	return d, nil
 }
@@ -187,17 +198,21 @@ func hashUsers(users []*User) error {
 	return firstErr
 }
 
-func orDefault(v, fallback string) string {
-	if v == "" {
-		return fallback
+// seededInstant reads an optional seeded timestamp: omission means the
+// reset time, and a time after the reset is rejected.
+func seededInstant(text string, reset Instant, what string) (Instant, error) {
+	if text == "" {
+		return reset, nil
 	}
-	return v
+	at, err := ParseInstant(text)
+	if err != nil {
+		return Instant{}, apierr.Invalid("%s must be an RFC 3339 instant with an offset", what)
+	}
+	if at.T.After(reset.T) {
+		return Instant{}, apierr.Invalid("%s must not be in the future", what)
+	}
+	return at, nil
 }
 
-const timeLayout = "2006-01-02T15:04:05-07:00"
-
-func formatTime(t time.Time) string { return t.UTC().Format(timeLayout) }
-
-// stamp is the current time as an API timestamp. It is truncated to whole
-// seconds so a printed created_at + ttl is exactly the printed expires_at.
-func (tx *Tx) stamp() string { return formatTime(tx.now) }
+// stamp is the current time as an API timestamp, to the microsecond.
+func (tx *Tx) stamp() Instant { return NewInstant(tx.now) }

@@ -111,10 +111,20 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request, sess session) {
+	q := r.URL.Query()
+	var tq store.TemporalQuery
+	var err error
+	if tq.AsOf, err = instantParam(q, "as_of"); err == nil {
+		tq.KnownAt, err = instantParam(q, "known_at")
+	}
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	var view store.MeView
-	err := s.view(sess, func(tx *store.Tx) error {
+	err = s.view(sess, func(tx *store.Tx) error {
 		var merr error
-		view, merr = tx.Me(sess.userID)
+		view, merr = tx.MeAt(sess.userID, tq)
 		return merr
 	})
 	if err != nil {

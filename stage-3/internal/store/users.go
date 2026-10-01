@@ -18,6 +18,9 @@ type MeView struct {
 	Held        int64  `json:"held"`
 	Currency    string `json:"currency"`
 	MinorUnits  int    `json:"minor_units"`
+	// AsOf and KnownAt echo the temporal query exactly as given.
+	AsOf    *Instant `json:"as_of,omitempty"`
+	KnownAt *Instant `json:"known_at,omitempty"`
 }
 
 // Credentials is what a login needs to verify a password.
@@ -87,7 +90,8 @@ func (tx *Tx) Signup(email, displayName, hash string) (Session, error) {
 	if err != nil {
 		return Session{}, err
 	}
-	u := &User{ID: tx.st.newUserID(), Email: email, DisplayName: displayName, Handle: handle, PasswordHash: hash}
+	opening := int64(0)
+	u := &User{ID: tx.st.newUserID(), Email: email, DisplayName: displayName, Handle: handle, PasswordHash: hash, Opening: &opening}
 	tx.st.Users = append(tx.st.Users, u)
 	tx.st.usersByID[u.ID] = u
 	tx.st.usersByHandle[handle] = u

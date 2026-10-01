@@ -5,7 +5,7 @@ import "pocketful/internal/apierr"
 // SettlementView is the API representation of a committed settlement.
 type SettlementView struct {
 	SettlementID string        `json:"settlement_id"`
-	CommittedAt  string        `json:"committed_at"`
+	CommittedAt  Instant       `json:"committed_at"`
 	Payments     []PaymentView `json:"payments"`
 }
 

@@ -36,14 +36,14 @@ func New() *Store {
 func (s *Store) Update(fn func(tx *Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return fn(&Tx{st: s.st, now: time.Now().UTC()})
+	return fn(&Tx{st: s.st, now: time.Now().UTC().Truncate(time.Microsecond)})
 }
 
 // View runs fn with shared read-only access to the state.
 func (s *Store) View(fn func(tx *Tx) error) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return fn(&Tx{st: s.st, now: time.Now().UTC()})
+	return fn(&Tx{st: s.st, now: time.Now().UTC().Truncate(time.Microsecond)})
 }
 
 func (s *Store) replace(st *state) {

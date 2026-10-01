@@ -35,6 +35,9 @@ type User struct {
 	Handle       string `json:"handle"`
 	PasswordHash string `json:"password_hash"`
 	Balance      int64  `json:"balance"`
+	// Opening is the balance before any payment moved. Nil only in an
+	// export from an earlier stage, where newState derives it.
+	Opening *int64 `json:"opening_balance"`
 }
 
 // Payment is a completed money movement.
@@ -48,7 +51,34 @@ type Payment struct {
 	RequestID       *string `json:"request_id"`
 	SettlementID    *string `json:"settlement_id"`
 	AuthorizationID *string `json:"authorization_id"`
-	CreatedAt       string  `json:"created_at"`
+	// Revisions is the append-only history; revision 1 is the original
+	// payment. Amount above always stays the original amount.
+	Revisions []*Revision `json:"revisions"`
+	CreatedAt Instant     `json:"created_at"`
+}
+
+// Revision is one version of a payment's amount. EffectiveAt is when the
+// money took effect, RecordedAt when the service learned of it.
+type Revision struct {
+	Revision    int     `json:"revision"`
+	Amount      int64   `json:"amount"`
+	EffectiveAt Instant `json:"effective_at"`
+	RecordedAt  Instant `json:"recorded_at"`
+	Reason      string  `json:"reason"`
+}
+
+// latest is the newest revision.
+func (p *Payment) latest() *Revision { return p.Revisions[len(p.Revisions)-1] }
+
+// selected is the newest revision recorded at or before known; a nil known
+// means everything recorded so far. It is nil if none was recorded yet.
+func (p *Payment) selected(known *time.Time) *Revision {
+	for i := len(p.Revisions) - 1; i >= 0; i-- {
+		if known == nil || !p.Revisions[i].RecordedAt.T.After(*known) {
+			return p.Revisions[i]
+		}
+	}
+	return nil
 }
 
 // Request asks a payer for money.
@@ -60,7 +90,7 @@ type Request struct {
 	Note        string  `json:"note"`
 	Status      string  `json:"status"`
 	PaymentID   *string `json:"payment_id"`
-	CreatedAt   string  `json:"created_at"`
+	CreatedAt   Instant `json:"created_at"`
 }
 
 // Share is one participant's part of a split.
@@ -77,13 +107,13 @@ type Split struct {
 	Note       string   `json:"note"`
 	Shares     []Share  `json:"shares"`
 	RequestIDs []string `json:"request_ids"`
-	CreatedAt  string   `json:"created_at"`
+	CreatedAt  Instant  `json:"created_at"`
 }
 
 // Settlement records the payments committed together as one batch.
 type Settlement struct {
 	ID          string   `json:"id"`
-	CommittedAt string   `json:"committed_at"`
+	CommittedAt Instant  `json:"committed_at"`
 	PaymentIDs  []string `json:"payment_ids"`
 }
 
@@ -120,11 +150,13 @@ type Authorization struct {
 	Note           string   `json:"note"`
 	Visibility     string   `json:"visibility"`
 	Status         string   `json:"status"`
-	ExpiresAt      string   `json:"expires_at"`
+	ExpiresAt      Instant  `json:"expires_at"`
 	PaymentIDs     []string `json:"payment_ids"`
-	CreatedAt      string   `json:"created_at"`
+	CreatedAt      Instant  `json:"created_at"`
 
-	expires time.Time
+	// ClosedAt is when a final capture or void released the hold; nil
+	// while open. A clock expiry is derived from ExpiresAt instead.
+	ClosedAt *Instant `json:"closed_at"`
 }
 
 // remaining is the part of the authorization not yet captured.
@@ -132,12 +164,12 @@ func (a *Authorization) remaining() int64 { return a.Amount - a.CapturedAmount }
 
 // holding reports whether the authorization currently reserves funds.
 func (a *Authorization) holding(now time.Time) bool {
-	return a.Status == AuthOpen && a.expires.After(now)
+	return a.Status == AuthOpen && a.ExpiresAt.T.After(now)
 }
 
 // effectiveStatus is the status as of now, with lazy expiry applied.
 func (a *Authorization) effectiveStatus(now time.Time) string {
-	if a.Status == AuthOpen && !a.expires.After(now) {
+	if a.Status == AuthOpen && !a.ExpiresAt.T.After(now) {
 		return AuthExpired
 	}
 	return a.Status
@@ -158,6 +190,7 @@ type Data struct {
 	Idempotency    []*IdempotencyRecord `json:"idempotency"`
 	Operators      []string             `json:"operators"`
 	Counters       map[string]int64     `json:"counters"`
+	Snapshots      []*Snapshot          `json:"snapshots"`
 }
 
 // state is Data plus lookup indexes derived from it.
@@ -171,6 +204,7 @@ type state struct {
 	splitsByID    map[string]*Split
 	settlements   map[string]*Settlement
 	authzByID     map[string]*Authorization
+	snapshots     map[string]*Snapshot
 	idem          map[string]*IdempotencyRecord
 	operators     map[string]bool
 }
@@ -217,6 +251,7 @@ func newState(d Data) (*state, error) {
 		splitsByID:    map[string]*Split{},
 		settlements:   map[string]*Settlement{},
 		authzByID:     map[string]*Authorization{},
+		snapshots:     map[string]*Snapshot{},
 		idem:          map[string]*IdempotencyRecord{},
 		operators:     map[string]bool{},
 	}
@@ -239,6 +274,9 @@ func newState(d Data) (*state, error) {
 		}
 		if p.Amount < 0 || p.Amount > money.MaxSafe || !validVisibility(p.Visibility) {
 			return nil, apierr.Invalid("payment %s has an invalid amount or visibility", p.ID)
+		}
+		if err := normalizeRevisions(p); err != nil {
+			return nil, err
 		}
 		st.paymentsByID[p.ID] = p
 	}
@@ -275,6 +313,14 @@ func newState(d Data) (*state, error) {
 		if err := st.indexAuthorization(a); err != nil {
 			return nil, err
 		}
+	}
+	st.deriveOpenings()
+	st.backfillClosedAt()
+	for _, sn := range d.Snapshots {
+		if sn == nil || sn.Token == "" || st.usersByID[sn.UserID] == nil || st.snapshots[sn.Token] != nil {
+			return nil, apierr.Invalid("invalid statement snapshot")
+		}
+		st.snapshots[sn.Token] = sn
 	}
 	if err := st.checkHolds(time.Now()); err != nil {
 		return nil, err
@@ -349,6 +395,46 @@ func (st *state) newSplitID() string {
 	return st.nextID("sp", func(id string) bool { return st.splitsByID[id] != nil })
 }
 
+// normalizeRevisions gives a payment from an earlier stage its revision 1
+// and checks the history of a stage-3 payment.
+func normalizeRevisions(p *Payment) error {
+	if p.CreatedAt.IsZero() {
+		return apierr.Invalid("payment %s has no created_at", p.ID)
+	}
+	if len(p.Revisions) == 0 {
+		p.Revisions = []*Revision{{Revision: 1, Amount: p.Amount, EffectiveAt: p.CreatedAt, RecordedAt: p.CreatedAt}}
+		return nil
+	}
+	for i, r := range p.Revisions {
+		bad := r == nil || r.Revision != i+1 || r.Amount < 0 || r.Amount > money.MaxSafe ||
+			r.EffectiveAt.IsZero() || r.RecordedAt.IsZero() ||
+			(i > 0 && !r.RecordedAt.T.After(p.Revisions[i-1].RecordedAt.T))
+		if bad {
+			return apierr.Invalid("payment %s has an invalid revision history", p.ID)
+		}
+	}
+	if p.Revisions[0].Amount != p.Amount {
+		return apierr.Invalid("payment %s revision 1 differs from its original amount", p.ID)
+	}
+	return nil
+}
+
+// deriveOpenings fills the opening balance of users that lack one: the
+// current balance minus the net effect of every payment's original amount.
+func (st *state) deriveOpenings() {
+	net := map[string]int64{}
+	for _, p := range st.Payments {
+		net[p.ToID] += p.Amount
+		net[p.FromID] -= p.Amount
+	}
+	for _, u := range st.Users {
+		if u.Opening == nil {
+			opening := u.Balance - net[u.ID]
+			u.Opening = &opening
+		}
+	}
+}
+
 func (st *state) newAuthorizationID() string {
 	return st.nextID("a", func(id string) bool { return st.authzByID[id] != nil })
 }
@@ -394,11 +480,9 @@ func (st *state) indexAuthorization(a *Authorization) error {
 	default:
 		return apierr.Invalid("authorization %s has an invalid status", a.ID)
 	}
-	expires, err := time.Parse(time.RFC3339, a.ExpiresAt)
-	if err != nil {
-		return apierr.Invalid("authorization %s has an invalid expires_at", a.ID)
+	if a.ExpiresAt.IsZero() || a.CreatedAt.IsZero() {
+		return apierr.Invalid("authorization %s needs created_at and expires_at", a.ID)
 	}
-	a.expires = expires
 	if a.PaymentIDs == nil {
 		a.PaymentIDs = []string{}
 	}

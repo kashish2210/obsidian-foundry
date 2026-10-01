@@ -666,8 +666,8 @@
       const shares = equalShares(total, people.length);
       preview.replaceChildren(
         h('ul', null, people.map((who, i) => h('li', null,
-          h('span', null, `@${who}`, who === me.handle ? ' (you – not requested)' : ''),
-          h('span', { 'data-testid': `split-share-${who}` }, formatAmount(shares[i]))))),
+          h('span', { class: 'who' }, `@${who}`, who === me.handle ? h('span', { class: 'you' }, ' (you – not requested)') : null),
+          h('span', { class: 'share', 'data-testid': `split-share-${who}` }, formatAmount(shares[i]))))),
         h('p', { class: 'preview-hint total-line' }, `Total ${formatAmount(total)}, shared as evenly as possible.`));
     }
 
@@ -795,7 +795,7 @@
         h('span', { class: `badge ${a.status}` }, STATUS[a.status]),
         h('span', { class: `badge ${a.visibility}` }, icon(a.visibility === 'private' ? 'lock' : 'globe'), a.visibility === 'private' ? 'Private' : 'Public'),
         h('span', null, icon('clock'), ` ${a.status === 'expired' ? 'Expired' : 'Expires'} ${humanTime(a.expires_at)} `),
-        h('time', { datetime: a.expires_at, 'data-testid': `authorization-expires-${id}` }, a.expires_at),
+        h('time', { class: 'raw-ts', datetime: a.expires_at, 'data-testid': `authorization-expires-${id}` }, a.expires_at),
       ];
       const progress = [];
       if (a.status === 'captured') {

@@ -78,16 +78,15 @@ problem, and it keeps rejections short.
 reassigns the item. It was never triggered in the submitted run.
 
 **Two model tiers.** Opus for the seats that judge (coordinator, reviewer), Sonnet for the
-seats that produce volume (implementer, tester). In the git history, Sonnet co-authored
-17 commits and Opus 7.
+seats that produce volume (implementer, tester).
 
 ## How the factory caught bad work (submitted run)
 
 | Stage | What was caught | By | Gate | Fix |
 |---|---|---|---|---|
-| 1 | The tester's `COVERAGE.md` was never committed: a `coverage.*` pattern in our root `.gitignore` matched it case-insensitively on Windows, so 8 ids had no committed reason, and R26, R41–R44 were exercised but not named | reviewer | 5, ledger coverage | tester force-added the file and named the tests (`0302166`) |
-| 3 | A seeded record whose timestamp field is present but empty was accepted instead of rejected (R200), and capturing an expired authorization returned the wrong error (R239) | tester's suite, before review | 4 | implementer fix `9007ae2` |
-| 4 | Batch correction precedence depended on item order: a complete settlement with mismatched instants listed first hid a later incomplete settlement, so the batch returned the wrong error (R257). The tester's suite only had one settlement per batch | reviewer | 6, code review | two-pass check `7c0bd9b`, three-order test `f00f0b0`, unit test `0298378` |
+| 1 | The tester's `COVERAGE.md` was never committed: a `coverage.*` pattern in our root `.gitignore` matched it case-insensitively on Windows, so 8 ids had no committed reason, and R26, R41–R44 were exercised but not named | reviewer | 5, ledger coverage | tester force-added the file and named the tests (`400b2ca`) |
+| 3 | A seeded record whose timestamp field is present but empty was accepted instead of rejected (R200), and capturing an expired authorization returned the wrong error (R239) | tester's suite, before review | 4 | implementer fix `8a48f41` |
+| 4 | Batch correction precedence depended on item order: a complete settlement with mismatched instants listed first hid a later incomplete settlement, so the batch returned the wrong error (R257). The tester's suite only had one settlement per batch | reviewer | 6, code review | two-pass check `f409731`, three-order test `8fee467`, unit test `e4b1a87` |
 
 The stage-4 case is the one the design exists for. Every shipped check passed, and the
 tester's suite passed. Only reading the code against the ledger found it.
@@ -142,3 +141,47 @@ Model spend: _fill in from Band Analytics before submitting._
    specs, the result repository, stack constraints and the gate commands. That file is
    the only thing that changes between problems.
 5. Paste it to the coordinator once. Send nothing else until the final report.
+
+## Commit ids in room.json
+
+After the run, we edited commit messages to remove co-author trailers. File contents
+are unchanged (same trees), but the commit ids changed. `room.json` is the unedited
+Band download, so it cites the original ids. This table maps them.
+
+<details>
+<summary>Original id to current id (30 commits)</summary>
+
+| In room.json | In this repository | Commit |
+|---|---|---|
+| `c4176d2` | `036b0fd` | Restructure into factory layout: generic mandates, FACTORY.md, dispatch task |
+| `e96706c` | `1eaa473` | stage-1: requirement ledger R1-R122 |
+| `c3b4f9a` | `3a16845` | stage-1: service core, settlements, export/import (R1-R122) |
+| `76a3bc7` | `a7cb4cf` | stage-1 acceptance: black-box Go suite covering R1-R4, R11-R20, R22-R37, R39-R59, R61-R122 (119 tests) |
+| `60d8312` | `18e608c` | stage-1 ledger notes: record rejection 1 (gate 5 coverage: R5-R7,R9,R10,R21,R38,R60,R26,R41-R44) |
+| `0302166` | `400b2ca` | stage-1 acceptance: commit COVERAGE.md (was gitignored by coverage.*), add explicit tests for R26, R41-R44 |
+| `064ff9b` | `cad2fec` | stage-2: requirement ledger R1-R197 (copied R1-R122, appended R123-R197) |
+| `9aae7d3` | `56f7ee4` | stage-2: copy accepted stage-1 (0302166) as base |
+| `8cdfd20` | `1c3b81a` | stage-2: copy stage-1 acceptance COVERAGE.md (ignored by coverage.* rule) |
+| `6335484` | `3c2ce05` | stage-2: authorizations, holds, available/held on /me (R163-R188, R195); session re-check inside write lock and atomic login token (R196); return fixture hashing errors (R197); R172 insufficient_funds on available, R175 authorization_id |
+| `62dda67` | `4c438e2` | stage-2: wallet UI (R123-R159, R189-R194): embedded HTML/CSS/JS, content negotiation on /requests and /authorizations |
+| `3390822` | `25123c4` | stage-2: UI fixes (empty error slots, icon sizing, expiry wording) for R129, R149, R193 |
+| `acba248` | `317c944` | stage-2: fixture numbers reject strings (R167), RUN.md image tag pocketful-s2 |
+| `485278c` | `0873084` | stage-2 acceptance: API suite R160, R163-R188, R195 (Go) and browser suite R123-R159, R189-R194 (Playwright); COVERAGE.md for R1-R197; RUN.md acceptance commands |
+| `26d624b` | `9562d3d` | stage-3: requirement ledger R1-R239 (copied R1-R197, appended R198-R239) |
+| `e4cecfb` | `06f6926` | stage-3: copy accepted stage-2 (485278c) as base |
+| `b3e90b8` | `5380162` | stage-3: history model, statements, corrections, historical holds (R198-R237); UI nits (R238) |
+| `27082ca` | `b2a7fa6` | stage-3 acceptance: statements, as_of/known_at, corrections, revisions, snapshots, linked payments, stage-1/2 import, historical holds, export (R198-R237); R239 strict expired capture; COVERAGE.md R1-R239 |
+| `9007ae2` | `8a48f41` | stage-3: seeded created_at present-but-empty is invalid (R200); capture of an expired authorization is authorization_expired (R239) |
+| `08f03d9` | `0b029e4` | stage-3 acceptance: regenerate stage-2 export fixture with 10-year holds so R230 does not depend on wall-clock age |
+| `6cce609` | `6ace6c6` | stage-4: requirement ledger R1-R263 (copied R1-R239, appended R240-R263) |
+| `77d87ab` | `1139309` | stage-4: copy accepted stage-3 (08f03d9) as base |
+| `775e7ad` | `df2c56b` | stage-4: refunds, correction batches, refund_of and correction_batch_id (R240-R263) |
+| `ce751e6` | `a79c980` | stage-4 acceptance: refunds, correction batches, imports, invariants (R240-R246, R250-R263); COVERAGE.md R1-R263 |
+| `96f1f66` | `1f03c94` | stage-4 ledger notes: record rejection 1 (R257 settlement precedence) |
+| `f00f0b0` | `8fee467` | stage-4 acceptance: R257 two-settlement precedence case (completeness of every settlement before the instant rule); gofmt |
+| `7c0bd9b` | `f409731` | stage-4: settlement completeness is checked for every settlement before any instant comparison (R256, R257) |
+| `0298378` | `e4b1a87` | stage-4: unit test for settlement completeness precedence in batches (R256, R257) |
+| `eff3906` | `df67ced` | Submission docs: README, FACTORY with measured results; drop internal plan and coverage ignore rule |
+| `64adf86` | `73f8bc9` | FACTORY: record isolated-mode results for all four stages |
+
+</details>

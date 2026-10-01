@@ -14,7 +14,6 @@ stage-*/server
 *.exe
 *.test
 *.out
-coverage.*
 
 # --- Python (browser acceptance tests) ---
 __pycache__/

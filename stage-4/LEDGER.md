@@ -429,3 +429,4 @@ There are now ten idempotent write paths.
 - Stage 1 was accepted at 0302166 after 1 rejection (gate 5 coverage).
 - Stage 2 was accepted at 485278c with 0 rejections.
 - Stage 3 was accepted at 08f03d9 with 0 rejections. Before review the suite caught R200 (empty seeded created_at accepted), fixed in 9007ae2.
+- Stage 4 rejection 1 (reviewer, rev ce751e6): gates 1-5 and 7 passed (host checks claimed 4; API 241/241; UI 85/85). Gate 6 failed on R257/R256. checkSettlements (store/corrections.go ~L214) checks completeness and instants per settlement in one loop. A batch [S1 complete with mismatched instants, then S2 incomplete] returned 422 validation_failed instead of incomplete_settlement, so the result depended on input order. Fix owners: the implementer (run the completeness pass over all settlements, then the instant pass) and the tester (add the two-settlement case).

@@ -51,6 +51,8 @@ type Payment struct {
 	RequestID       *string `json:"request_id"`
 	SettlementID    *string `json:"settlement_id"`
 	AuthorizationID *string `json:"authorization_id"`
+	// RefundOf names the payment this one refunds; nil for any other.
+	RefundOf *string `json:"refund_of"`
 	// Revisions is the append-only history; revision 1 is the original
 	// payment. Amount above always stays the original amount.
 	Revisions []*Revision `json:"revisions"`
@@ -65,6 +67,8 @@ type Revision struct {
 	EffectiveAt Instant `json:"effective_at"`
 	RecordedAt  Instant `json:"recorded_at"`
 	Reason      string  `json:"reason"`
+	// CorrectionBatchID is set on revisions made by a correction batch.
+	CorrectionBatchID *string `json:"correction_batch_id"`
 }
 
 // latest is the newest revision.
@@ -177,20 +181,21 @@ func (a *Authorization) effectiveStatus(now time.Time) string {
 
 // Data is the complete serialisable service state; it is the export format.
 type Data struct {
-	Currency       string               `json:"currency"`
-	MinorUnits     int                  `json:"minor_units"`
-	AuthTTL        int                  `json:"authorization_ttl_seconds"`
-	Users          []*User              `json:"users"`
-	Tokens         map[string]string    `json:"tokens"`
-	Payments       []*Payment           `json:"payments"`
-	Requests       []*Request           `json:"requests"`
-	Splits         []*Split             `json:"splits"`
-	Settlements    []*Settlement        `json:"settlements"`
-	Authorizations []*Authorization     `json:"authorizations"`
-	Idempotency    []*IdempotencyRecord `json:"idempotency"`
-	Operators      []string             `json:"operators"`
-	Counters       map[string]int64     `json:"counters"`
-	Snapshots      []*Snapshot          `json:"snapshots"`
+	Currency          string               `json:"currency"`
+	MinorUnits        int                  `json:"minor_units"`
+	AuthTTL           int                  `json:"authorization_ttl_seconds"`
+	Users             []*User              `json:"users"`
+	Tokens            map[string]string    `json:"tokens"`
+	Payments          []*Payment           `json:"payments"`
+	Requests          []*Request           `json:"requests"`
+	Splits            []*Split             `json:"splits"`
+	Settlements       []*Settlement        `json:"settlements"`
+	Authorizations    []*Authorization     `json:"authorizations"`
+	Idempotency       []*IdempotencyRecord `json:"idempotency"`
+	Operators         []string             `json:"operators"`
+	Counters          map[string]int64     `json:"counters"`
+	Snapshots         []*Snapshot          `json:"snapshots"`
+	CorrectionBatches []*CorrectionBatch   `json:"correction_batches"`
 }
 
 // state is Data plus lookup indexes derived from it.
@@ -205,6 +210,8 @@ type state struct {
 	settlements   map[string]*Settlement
 	authzByID     map[string]*Authorization
 	snapshots     map[string]*Snapshot
+	batches       map[string]*CorrectionBatch
+	refunded      map[string]int64
 	idem          map[string]*IdempotencyRecord
 	operators     map[string]bool
 }
@@ -252,6 +259,8 @@ func newState(d Data) (*state, error) {
 		settlements:   map[string]*Settlement{},
 		authzByID:     map[string]*Authorization{},
 		snapshots:     map[string]*Snapshot{},
+		batches:       map[string]*CorrectionBatch{},
+		refunded:      map[string]int64{},
 		idem:          map[string]*IdempotencyRecord{},
 		operators:     map[string]bool{},
 	}
@@ -279,6 +288,21 @@ func newState(d Data) (*state, error) {
 			return nil, err
 		}
 		st.paymentsByID[p.ID] = p
+	}
+	for _, p := range d.Payments {
+		if p.RefundOf == nil {
+			continue
+		}
+		if st.paymentsByID[*p.RefundOf] == nil {
+			return nil, apierr.Invalid("refund %s refers to an unknown payment", p.ID)
+		}
+		st.refunded[*p.RefundOf] += p.Amount
+	}
+	for _, b := range d.CorrectionBatches {
+		if b == nil || b.ID == "" || st.batches[b.ID] != nil {
+			return nil, apierr.Invalid("correction batch ids must be non-empty and unique")
+		}
+		st.batches[b.ID] = b
 	}
 	for _, r := range d.Requests {
 		if r == nil || r.ID == "" || st.requestsByID[r.ID] != nil {
@@ -433,6 +457,10 @@ func (st *state) deriveOpenings() {
 			u.Opening = &opening
 		}
 	}
+}
+
+func (st *state) newBatchID() string {
+	return st.nextID("cb", func(id string) bool { return st.batches[id] != nil })
 }
 
 func (st *state) newAuthorizationID() string {

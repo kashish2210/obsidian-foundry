@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"sort"
 	"time"
 
@@ -161,20 +162,22 @@ type StatementEntry struct {
 
 // Snapshot is a frozen statement, paged by token.
 type Snapshot struct {
-	Token   string           `json:"token"`
-	UserID  string           `json:"user_id"`
-	Opening int64            `json:"opening_balance"`
-	Closing int64            `json:"closing_balance"`
-	Entries []StatementEntry `json:"entries"`
+	Token   string `json:"token"`
+	UserID  string `json:"user_id"`
+	Opening int64  `json:"opening_balance"`
+	Closing int64  `json:"closing_balance"`
+	// Entries are kept as encoded JSON so a snapshot imported from an
+	// earlier stage pages exactly the entries it was frozen with.
+	Entries []json.RawMessage `json:"entries"`
 }
 
 // StatementView is one page of a statement.
 type StatementView struct {
-	OpeningBalance int64            `json:"opening_balance"`
-	Entries        []StatementEntry `json:"entries"`
-	ClosingBalance int64            `json:"closing_balance"`
-	HasMore        bool             `json:"has_more"`
-	Snapshot       string           `json:"snapshot"`
+	OpeningBalance int64             `json:"opening_balance"`
+	Entries        []json.RawMessage `json:"entries"`
+	ClosingBalance int64             `json:"closing_balance"`
+	HasMore        bool              `json:"has_more"`
+	Snapshot       string            `json:"snapshot"`
 }
 
 // StatementQuery is the window and knowledge of a new statement.
@@ -183,7 +186,7 @@ type StatementQuery struct {
 }
 
 func (s *Snapshot) page(pg Page) StatementView {
-	entries := []StatementEntry{}
+	entries := []json.RawMessage{}
 	if pg.Offset < len(s.Entries) {
 		end := pg.Offset + pg.Limit
 		if end > len(s.Entries) {
@@ -211,7 +214,7 @@ func (tx *Tx) Statement(userID string, q StatementQuery, pg Page) (StatementView
 	if q.To != nil {
 		to = q.To.T
 	}
-	snap := &Snapshot{UserID: userID, Opening: *u.Opening, Entries: []StatementEntry{}}
+	snap := &Snapshot{UserID: userID, Opening: *u.Opening, Entries: []json.RawMessage{}}
 	for _, it := range items {
 		if q.From != nil && it.effective().Before(q.From.T) {
 			snap.Opening += it.delta
@@ -226,10 +229,14 @@ func (tx *Tx) Statement(userID string, q StatementQuery, pg Page) (StatementView
 		running += it.delta
 		view := tx.paymentView(it.payment)
 		view.Amount = it.rev.Amount
-		snap.Entries = append(snap.Entries, StatementEntry{
+		encoded, err := json.Marshal(StatementEntry{
 			Payment: view, Delta: it.delta, BalanceAfter: running,
 			Revision: it.rev.Revision, EffectiveAt: it.rev.EffectiveAt, RecordedAt: it.rev.RecordedAt,
 		})
+		if err != nil {
+			return StatementView{}, err
+		}
+		snap.Entries = append(snap.Entries, encoded)
 	}
 	snap.Closing = running
 	token, err := newToken()

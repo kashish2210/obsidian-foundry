@@ -19,6 +19,7 @@ type PaymentView struct {
 	RequestID       *string `json:"request_id"`
 	SettlementID    *string `json:"settlement_id"`
 	AuthorizationID *string `json:"authorization_id"`
+	RefundOf        *string `json:"refund_of"`
 	CreatedAt       Instant `json:"created_at"`
 }
 
@@ -42,13 +43,13 @@ func (tx *Tx) paymentView(p *Payment) PaymentView {
 		PaymentID: p.ID, FromUserID: p.FromID, FromHandle: from.Handle,
 		ToUserID: p.ToID, ToHandle: to.Handle, Amount: p.Amount,
 		Currency: tx.st.Currency, Note: p.Note, Visibility: p.Visibility,
-		RequestID: p.RequestID, SettlementID: p.SettlementID, AuthorizationID: p.AuthorizationID, CreatedAt: p.CreatedAt,
+		RequestID: p.RequestID, SettlementID: p.SettlementID, AuthorizationID: p.AuthorizationID, RefundOf: p.RefundOf, CreatedAt: p.CreatedAt,
 	}
 }
 
 // links say what a payment was created for; all nil for a direct payment.
 type links struct {
-	requestID, settlementID, authorizationID *string
+	requestID, settlementID, authorizationID, refundOf *string
 }
 
 // transfer moves money and records the payment. Callers must have checked
@@ -59,7 +60,7 @@ func (tx *Tx) transfer(from, to *User, amount int64, note, visibility string, l 
 	p := &Payment{
 		ID: tx.st.newPaymentID(), FromID: from.ID, ToID: to.ID, Amount: amount,
 		Note: note, Visibility: visibility, RequestID: l.requestID,
-		SettlementID: l.settlementID, AuthorizationID: l.authorizationID, CreatedAt: createdAt,
+		SettlementID: l.settlementID, AuthorizationID: l.authorizationID, RefundOf: l.refundOf, CreatedAt: createdAt,
 		Revisions: []*Revision{{Revision: 1, Amount: amount, EffectiveAt: createdAt, RecordedAt: createdAt}},
 	}
 	tx.st.Payments = append(tx.st.Payments, p)

@@ -227,12 +227,7 @@ func (s *Server) createSplit(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) settle(w http.ResponseWriter, r *http.Request) {
 	s.idempotent(idempotentWrite{
-		gate: func(tx *store.Tx, caller string) error {
-			if !tx.IsOperator(caller) {
-				return apierr.Forbidden("settlements require an operator")
-			}
-			return nil
-		},
+		gate: requireOperator,
 		run: func(tx *store.Tx, caller string, body map[string]any, _ *http.Request) (any, error) {
 			transfers, err := parseTransfers(body)
 			if err != nil {

@@ -43,6 +43,8 @@ func New(s *store.Store) http.Handler {
 	route("/me", map[string]http.HandlerFunc{"GET": srv.authed(srv.me)})
 	route("/payments", map[string]http.HandlerFunc{"POST": srv.sendPayment})
 	route("/payments/{id}/corrections", map[string]http.HandlerFunc{"POST": srv.correct})
+	route("/payments/{id}/refunds", map[string]http.HandlerFunc{"POST": srv.refund})
+	route("/correction-batches", map[string]http.HandlerFunc{"POST": srv.correctBatch})
 	route("/payments/{id}/revisions", map[string]http.HandlerFunc{"GET": srv.authed(srv.revisions)})
 	route("/statement", map[string]http.HandlerFunc{"GET": srv.authed(srv.statement)})
 	route("/requests", map[string]http.HandlerFunc{"POST": srv.createRequest, "GET": negotiate(srv.authed(srv.listRequests))})

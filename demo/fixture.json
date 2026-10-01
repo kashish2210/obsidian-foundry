@@ -1,0 +1,17 @@
+{
+  "currency": "EUR",
+  "minor_units": 2,
+  "settlement_operator_ids": ["u_ada"],
+  "users": [
+    { "id": "u_ada", "email": "ada@example.com", "password": "demo-pass-1", "display_name": "Ada", "handle": "ada", "balance": 12000 },
+    { "id": "u_bob", "email": "bob@example.com", "password": "demo-pass-1", "display_name": "Bob", "handle": "bob", "balance": 4500 },
+    { "id": "u_cy",  "email": "cy@example.com",  "password": "demo-pass-1", "display_name": "Cy",  "handle": "cy",  "balance": 3000 }
+  ],
+  "payments": [
+    { "id": "p_1", "from_user_id": "u_ada", "to_user_id": "u_bob", "amount": 500, "note": "coffee", "visibility": "public" },
+    { "id": "p_2", "from_user_id": "u_cy", "to_user_id": "u_ada", "amount": 1250, "note": "concert tickets", "visibility": "private" }
+  ],
+  "requests": [
+    { "id": "rq_1", "requester_id": "u_bob", "payer_id": "u_ada", "amount": 1200, "note": "taxi", "status": "pending" }
+  ]
+}

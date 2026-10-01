@@ -107,6 +107,11 @@ Times come from the git history (first ledger commit to the accepted revision).
 | 3 | 239 | 6 | 45 min | 0 (the suite caught R200 and R239 before review) | claimed stage 3 |
 | 4 | 260 | 8 | 4 h 08 min (3 min to first product commit, then a 3 h 48 min pause before the acceptance suite) | 1 | claimed stage 4 |
 
+Final check, from a fresh clone in isolated mode (internal network, no outbound access,
+2 vCPU, 2 GiB), with `harness run --all`: every folder claims its own stage. All
+shipped checks pass for every suite up to each folder's number (stage 1: 147, stage 2:
+35, stage 3: 6, stage 4: 5), and each folder fails the next stage's suite, as it should.
+
 Model spend: _fill in from Band Analytics before submitting._
 
 ## What we tried that failed

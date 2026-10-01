@@ -1,4 +1,4 @@
-# Stage 3 acceptance coverage (ledger R1-R239)
+# Stage 4 acceptance coverage (ledger R1-R263)
 
 Stage-1 and stage-2 ids keep their tests (listed below, unchanged apart from R239). Stage-3 ids are in the last table.
 
@@ -6,7 +6,7 @@ Commit this file with `git add -f` (the root `coverage.*` ignore rule matches it
 
 ## How to run
 
-- API suite (Go, stdlib only, sequential, ~95 s):
+- API suite (Go, stdlib only, sequential, ~110 s):
   `cd acceptance && BASE_URL=http://localhost:8080 go test -count=1 ./...`
   On this Windows host set `GOTMPDIR=K:/hackathons/band-work/gotmp` if Application Control blocks the test exe.
 - Browser suite (Python Playwright; Chromium, else Chrome/Edge via `PW_CHANNEL`):
@@ -188,3 +188,43 @@ Readings chosen where the spec is ambiguous (stage 3):
 | R239 | authz_test.go::expectCaptureClosed now requires exactly 409 `authorization_expired` (TestR170_LazyExpiry, TestR168_R169_R170_SeededAuthorizations, TestR183_CaptureErrorPrecedence) |
 
 The stage-2 table above lists R123-R197; R196/R197 remain code-review ids.
+
+
+## Stage 4 additions (R240-R263)
+
+Readings chosen where the spec is ambiguous (stage 4):
+- Refund precedence is tested exactly as the ledger states: amount validation, then 404/403, then `invalid_refund_target`, then `refund_exceeds_payment`, then `insufficient_funds` (R241). A non-receiver on a refund payment gets 403 before `invalid_refund_target`.
+- A refund of a payment whose corrected amount is 0 is `refund_exceeds_payment`.
+- A correction (single or batch item) equal to the refunded amount is allowed (R251).
+- Item order of checks inside a batch item: validation, 404, `linked_payment_immutable`, `stale_revision`, `refund_exceeds_payment` (R257); batch-level: item errors in input order, then `incomplete_settlement`, then the identical-instant `validation_failed`, then `insufficient_funds` (combined effect, against available), then `historical_overdraft`.
+- Batch effective instants are compared as instants; the same instant with `+02:00`/`-05:00` spellings is accepted, a one-microsecond difference is not.
+- A batch replay with an `effective_at` spelled differently is a different JSON value (409 `idempotency_key_reuse`), consistent with R68.
+- `correction_batch_id` is present (null) on r1 and on single-correction revisions in GET /revisions; the single-correction response may omit it or carry null.
+- Concurrency (R246, R261): exactly the expected number of refunds succeed; with a shared expected revision exactly one writer wins and a losing batch changes none of its members.
+- Exports from stages 1, 2 and 3 are real exports from the frozen services (`testdata/stage{1,2,3}_export.json` + meta); the stage-3 one holds a snapshot token, a correction, a settlement and uses 10-year holds.
+
+| id | test(s) |
+|---|---|
+| R240 | TestR240_RefundAuthAndKeys |
+| R241 | TestR241_RefundValidationAndPrecedence, TestR241_ValidTargetsAndFloorAfterCorrection |
+| R242 | TestR242_RefundShapeAndRefundOfNull (also asserted in TestR262_*) |
+| R243 | TestR243_RefundNeedsAvailableFunds |
+| R244 | TestR244_RefundsNeverReopenOrRestore |
+| R245 | TestR245_RefundIsAnOrdinaryPayment |
+| R246 | TestR246_ConcurrentRefundsNeverExceed, TestR246_ConcurrentRefundAndCorrectionKeepFloor |
+| R250 | TestR250_SingleCorrectionTargets, TestR245_RefundIsAnOrdinaryPayment, TestR256_SettlementCompleteness |
+| R251 | TestR251_CorrectionFloorIsTheRefundedAmount, TestR254_ItemErrors |
+| R252 | TestR252_BatchAuth |
+| R253 | TestR253_BatchShape |
+| R254 | TestR254_ItemErrors |
+| R255 | TestR255_OperatorCorrectsOthersButReadsNothing |
+| R256 | TestR256_SettlementCompleteness |
+| R257 | TestR257_ItemErrorsFirstInInputOrder, TestR257_AffordabilityIsCombined, TestR257_CombinedAffordabilityReverse, TestR257_AffordabilityUsesAvailable, TestR257_HistoricalOverdraftLast |
+| R258 | TestR258_RejectedBatchLeavesNoTraceAndClaimsNoKey |
+| R259 | TestR259_BatchResponseRevisionsAndReplay |
+| R260 | TestR260_OriginalsAndSnapshotsUnchanged |
+| R261 | TestR261_ConcurrentSingleAndBatchOneWinner, TestR261_ConcurrentBatchesSharingOnePayment |
+| R262 | TestR262_Stage1ExportImports, TestR262_Stage2ExportImports, TestR262_Stage3ExportImports, TestR262_ExportImportCarriesRefundsAndBatches |
+| R263 | TestR263_InvariantsAfterMixedOperations (plus the sum/negative checks inside the refund and batch tests) |
+
+Untested by design: unchanged from stage 3 (R5-R7, R9, R10, R21, R38, R60, R125, R127-R131, R196, R197, R238). Stage 4 adds no UI requirement; the 85 UI tests run unchanged.

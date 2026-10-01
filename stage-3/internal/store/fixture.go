@@ -61,7 +61,7 @@ type FixturePayment struct {
 	Note       string  `json:"note"`
 	Visibility string  `json:"visibility"`
 	RequestID  *string `json:"request_id"`
-	CreatedAt  string  `json:"created_at"`
+	CreatedAt  *string `json:"created_at"`
 }
 
 // FixtureRequest is a seeded request in any status.
@@ -73,7 +73,7 @@ type FixtureRequest struct {
 	Note        string  `json:"note"`
 	Status      string  `json:"status"`
 	PaymentID   *string `json:"payment_id"`
-	CreatedAt   string  `json:"created_at"`
+	CreatedAt   *string `json:"created_at"`
 }
 
 // Reset replaces all state with the fixture. The store is unchanged when
@@ -200,11 +200,11 @@ func hashUsers(users []*User) error {
 
 // seededInstant reads an optional seeded timestamp: omission means the
 // reset time, and a time after the reset is rejected.
-func seededInstant(text string, reset Instant, what string) (Instant, error) {
-	if text == "" {
+func seededInstant(text *string, reset Instant, what string) (Instant, error) {
+	if text == nil {
 		return reset, nil
 	}
-	at, err := ParseInstant(text)
+	at, err := ParseInstant(*text)
 	if err != nil {
 		return Instant{}, apierr.Invalid("%s must be an RFC 3339 instant with an offset", what)
 	}

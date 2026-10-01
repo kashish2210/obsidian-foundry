@@ -115,11 +115,12 @@ func (tx *Tx) Capture(callerID, authID string, in CaptureInput) (PaymentView, er
 	if a.ToID != callerID {
 		return PaymentView{}, apierr.Forbidden("only the receiver may capture this authorization")
 	}
-	if a.Status != AuthOpen {
-		return PaymentView{}, apierr.Conflict("authorization_not_open", "authorization is %s", a.Status)
-	}
-	if !a.holding(tx.now) {
+	switch status := a.effectiveStatus(tx.now); status {
+	case AuthOpen:
+	case AuthExpired:
 		return PaymentView{}, apierr.Conflict("authorization_expired", "authorization has expired")
+	default:
+		return PaymentView{}, apierr.Conflict("authorization_not_open", "authorization is %s", status)
 	}
 	amount := a.remaining()
 	if in.Amount != nil {

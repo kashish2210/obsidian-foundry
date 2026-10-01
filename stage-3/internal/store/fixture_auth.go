@@ -18,7 +18,7 @@ type FixtureAuthorization struct {
 	ExpiresAt      string   `json:"expires_at"`
 	PaymentID      *string  `json:"payment_id"`
 	PaymentIDs     []string `json:"payment_ids"`
-	CreatedAt      string   `json:"created_at"`
+	CreatedAt      *string  `json:"created_at"`
 }
 
 func (fa FixtureAuthorization) toAuthorization(reset Instant) (*Authorization, error) {

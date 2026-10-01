@@ -10,4 +10,6 @@ Health: `curl http://localhost:8080/health`
 
 ## Acceptance suite
 
-`cd acceptance && BASE_URL=http://localhost:8080 go test -count=1 ./...`
+API suite (Go): `cd acceptance && BASE_URL=http://localhost:8080 go test -count=1 ./...`
+
+Browser suite (Python Playwright): `cd acceptance && BASE_URL=http://localhost:8080 conda run -n venv python -m pytest ui`

@@ -485,7 +485,7 @@ func TestR195_ExportImportAuthorizations(t *testing.T) {
 	expect(t, voidA(t, e.tok["bob"], aid(t, vd.obj(t))), 200)
 	// a failed key stays reusable
 	failKey := newKey()
-	failBody := map[string]any{"to_handle": "dee", "amount": 99999999}
+	failBody := map[string]any{"to_handle": "ada", "amount": 99999999}
 	expectErr(t, post(t, "/authorizations", e.tok["dee"], failKey, failBody), 409, "insufficient_funds")
 
 	toks := map[string]string{}

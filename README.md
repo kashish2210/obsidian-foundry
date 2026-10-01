@@ -9,6 +9,25 @@ and rounding.
 
 **Team:** Vikas, Kashish, Dhruv
 
+## Demo video
+
+<!-- VIDEO: replace this line with the video link or embed -->
+
+## Demo users
+
+The [`deploy`](../../tree/deploy) branch build loads these users on start. Every user's
+password is `demo-pass-1`.
+
+| Name | Email | Handle | Starting balance |
+|---|---|---|---|
+| Ada | `ada@example.com` | `@ada` | 120.00 EUR |
+| Bob | `bob@example.com` | `@bob` | 45.00 EUR |
+| Cy | `cy@example.com` | `@cy` | 30.00 EUR |
+
+Also seeded: Bob has a pending 12.00 EUR taxi request to Ada, a public 5.00 EUR coffee
+payment from Ada to Bob, and a private 12.50 EUR concert payment from Cy to Ada. Data
+resets to this on every restart.
+
 ## How to read this repository
 
 | Path | What it is |

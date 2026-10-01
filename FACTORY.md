@@ -111,7 +111,24 @@ Final check, from a fresh clone in isolated mode (internal network, no outbound 
 shipped checks pass for every suite up to each folder's number (stage 1: 147, stage 2:
 35, stage 3: 6, stage 4: 5), and each folder fails the next stage's suite, as it should.
 
-Model spend: _fill in from Band Analytics before submitting._
+### Model spend
+
+From Band Desktop's Usage & Cost view, one session per seat for the whole four-stage
+run. Estimates are at list prices; the run itself used a Claude Pro subscription.
+
+| Seat | Model | Tokens | Estimated cost |
+|---|---|---|---|
+| tester | claude-sonnet-5-5 | 45.2M | $16.94 |
+| implementer | claude-sonnet-5-5 | 30.3M | $12.01 |
+| reviewer | claude-opus-5-5 | 26.3M | $12.19 |
+| coordinator | claude-opus-5-5 | 11.2M | $7.54 |
+| **Total** | | **113.0M** | **$48.68** |
+
+That works out to about $12 per stage, or roughly $0.19 per requirement id
+(260 ids). The tester is the most expensive seat: writing 300 independent tests from
+the spec costs more context than writing the product, and that's the trade we chose,
+since its suite and the reviewer's code review are what caught the bugs in the table
+above.
 
 ## What we tried that failed
 

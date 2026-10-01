@@ -210,10 +210,11 @@ func (tx *Tx) CorrectBatch(items []BatchItem) (BatchView, error) {
 }
 
 // checkSettlements enforces that correcting a settlement member means
-// correcting all of its members, to the same effective instant.
+// correcting all of its members, to the same effective instant. Every
+// settlement is checked for completeness before any instant is compared,
+// so the outcome does not depend on the order of the items.
 func (tx *Tx) checkSettlements(items []BatchItem, payments []*Payment, inBatch map[string]bool) error {
-	instants := map[string]time.Time{}
-	for i, p := range payments {
+	for _, p := range payments {
 		if p.SettlementID == nil {
 			continue
 		}
@@ -221,6 +222,12 @@ func (tx *Tx) checkSettlements(items []BatchItem, payments []*Payment, inBatch m
 			if !inBatch[member] {
 				return apierr.New(422, "incomplete_settlement", "settlement %s needs every member corrected together", *p.SettlementID)
 			}
+		}
+	}
+	instants := map[string]time.Time{}
+	for i, p := range payments {
+		if p.SettlementID == nil {
+			continue
 		}
 		at := items[i].Input.EffectiveAt.T
 		if first, seen := instants[*p.SettlementID]; seen && !first.Equal(at) {

@@ -1,10 +1,12 @@
-# Stage 2 acceptance coverage (ledger R1-R197)
+# Stage 3 acceptance coverage (ledger R1-R239)
+
+Stage-1 and stage-2 ids keep their tests (listed below, unchanged apart from R239). Stage-3 ids are in the last table.
 
 Commit this file with `git add -f` (the root `coverage.*` ignore rule matches it).
 
 ## How to run
 
-- API suite (Go, stdlib only, sequential, ~75 s):
+- API suite (Go, stdlib only, sequential, ~95 s):
   `cd acceptance && BASE_URL=http://localhost:8080 go test -count=1 ./...`
   On this Windows host set `GOTMPDIR=K:/hackathons/band-work/gotmp` if Application Control blocks the test exe.
 - Browser suite (Python Playwright; Chromium, else Chrome/Edge via `PW_CHANNEL`):
@@ -127,3 +129,62 @@ R112 TestR112_MultipleOperatorsAndOperatorIsNotSuperuser | R113 TestR115_R119_Se
 | R197 | not testable (see above); reviewer code review |
 
 Stage-1 nits fixed in this copy of COVERAGE.md: R113 is asserted in TestR115_R119_SettlementShape (no dedicated test); in TestR44 the `x@nodomain` 422 comes from the short password.
+
+
+## Stage 3 additions (R198-R239)
+
+Readings chosen where the spec is ambiguous (stage 3):
+- A seeded `created_at` of `""` is an invalid instant: reset 422 (R200). (`null` is not tested.)
+- `from > to`, `from == to` and windows before all history are empty with opening == closing (R212).
+- Ties at the same effective instant are ordered by payment id, compared as plain strings (R207); the suite uses ids that sort the same under any sane rule.
+- A correction that keeps the same amount is allowed; moving a payment's effective time later or earlier is checked by the same boundary rule (R218).
+- A snapshot taken before an export is valid after import; one taken after the export is 404 (R228/R237).
+- A capture on a clock-expired authorization is exactly `authorization_expired` (R239); a seeded entry whose stored status is already `expired` may report either 409 code (both spec rows apply).
+- `closed_at` of an imported already-closed stage-2 authorization is only checked for presence (null allowed): stage 2 recorded no event times.
+
+| id | test(s) |
+|---|---|
+| R198 | TestR198_R199_SeededCreatedAtAndDefault, TestR198_EveryPaymentEndpointCarriesCreatedAt |
+| R199 | TestR198_R199_SeededCreatedAtAndDefault |
+| R200 | TestR200_SeededCreatedAtValidation (finding at first stage-3 build: `created_at: ""` accepted) |
+| R201 | TestR201_BalancesNotChangedByLoadingAndOpening |
+| R202 | TestR202_InvalidInstants |
+| R203 | TestR203_NoTemporalParamsKeepsFieldsAndNoAsOfKey |
+| R204 | TestR204_AsOfInclusiveAndBounds |
+| R205 | TestR205_EchoVerbatim |
+| R206 | TestR206_StatementShapeAndDefaults, TestR206_R208_HalfOpenWindow |
+| R207 | TestR207_TiesOrderedByPaymentId |
+| R208 | TestR208_SumInvariantEveryUserEveryWindow, TestR206_R208_HalfOpenWindow |
+| R209 | TestR209_PaginationNeverChangesBalances, TestR209_DefaultLimit50 |
+| R210 | TestR210_OnlyOwnPayments |
+| R211 | TestR211_CorrectionsOneEntryPerPaymentZeroAmount |
+| R212 | TestR212_EmptyWindows |
+| R213 | TestR213_CorrectionAuthAndKeys, TestR221_ConcurrentCorrectionsOneWinner (8th idempotent path) |
+| R214 | TestR214_CorrectionValidation |
+| R215 | TestR215_CorrectionResponseAndRecordedTimes |
+| R216 | TestR216_StaleRevisionAndReplay |
+| R217 | TestR217_IncreaseDebitsSenderDecreaseDebitsReceiver |
+| R218 | TestR218_InsufficientFundsFirst, TestR218_R234_HistoricalOverdraft |
+| R219 | TestR219_FailuresLeaveNoTraceAndSumHolds, TestR218_R234_HistoricalOverdraft |
+| R220 | TestR220_OriginalPaymentAndReceiptsUnchanged |
+| R221 | TestR221_ConcurrentCorrectionsOneWinner, TestR221_ConcurrentCorrectionsAndPaymentsKeepInvariants |
+| R222 | TestR222_R223_Revisions |
+| R223 | TestR222_R223_Revisions |
+| R224 | TestR224_KnownAt, TestR224_R225_BackdatingMovesPaymentAcrossWindowAndOrder |
+| R225 | TestR224_R225_BackdatingMovesPaymentAcrossWindowAndOrder |
+| R226 | TestR226_SnapshotFrozenAcrossWrites, TestR226_SnapshotOfWindowedReadAndFirstPage |
+| R227 | TestR227_SnapshotAcceptsOnlyLimitAndOffset |
+| R228 | TestR228_SnapshotTokenOwnership, TestR228_FinalPartialPageAndHasMore, TestR237_ExportImportCarriesHistoryEverything |
+| R229 | TestR229_SettlementMembersAndCapturesAreImmutable |
+| R230 | TestR230_Stage1ExportImportsWithHistory, TestR230_Stage2ExportImportsWithAuthorizationsAndCaptures (real exports in testdata/stage1_*, stage2_*, the latter produced from the frozen stage-2 build) |
+| R231 | TestR231_R232_R233_HoldLifecycleInTime |
+| R232 | TestR231_R232_R233_HoldLifecycleInTime, TestR232_R233_FinalCaptureAndExpiryClosedAt, TestR232_ExpiryTakesEffectAtDeadline, TestR232_PartialCaptureThenExpiry |
+| R233 | TestR231_R232_R233_HoldLifecycleInTime, TestR232_R233_FinalCaptureAndExpiryClosedAt, TestR232_ExpiryTakesEffectAtDeadline |
+| R234 | TestR234_HistoricalOverdraftOnAvailable, TestR234_TotalNegativeInThePast, TestR218_R234_HistoricalOverdraft |
+| R235 | TestR235_SeededOpenHoldCreationTime |
+| R236 | TestR236_StatementMoneyOnlyAndCapturesOnce, TestR229_..., TestR226_SnapshotFrozenAcrossWrites |
+| R237 | TestR237_ExportImportCarriesHistoryEverything |
+| R238 | reviewer inspection: at 375 px the split preview rows do not wrap awkwardly; the raw RFC 3339 `expires_at` text in authorization rows is visually muted but keeps its testid. Existing UI tests (R130, R191, R151) still pass unchanged |
+| R239 | authz_test.go::expectCaptureClosed now requires exactly 409 `authorization_expired` (TestR170_LazyExpiry, TestR168_R169_R170_SeededAuthorizations, TestR183_CaptureErrorPrecedence) |
+
+The stage-2 table above lists R123-R197; R196/R197 remain code-review ids.

@@ -131,25 +131,26 @@ func TestR168_R169_R170_SeededAuthorizations(t *testing.T) {
 	}
 	r := capture(t, e.tok["bob"], "a_past", map[string]any{})
 	expectCaptureClosed(t, r)
+	// A seeded entry whose stored status is already "expired": both rows of the spec table apply
+	// (not open / past expires_at), so either 409 code is accepted here (the clock-expired cases above are strict, R239).
 	r = capture(t, e.tok["bob"], "a_exp", map[string]any{})
-	expectCaptureClosed(t, r)
+	if r.Status != 409 {
+		t.Fatalf("want 409, got %s", r)
+	}
+	if c := r.obj(t)["error"].(map[string]any)["code"]; c != "authorization_expired" && c != "authorization_not_open" {
+		t.Fatalf("code %v", c)
+	}
 	expectErr(t, capture(t, e.tok["bob"], "a_void", map[string]any{}), 403, "forbidden") // bob is not a_void's receiver (cy is)
 	expectErr(t, capture(t, e.tok["cy"], "a_void", map[string]any{}), 409, "authorization_not_open")
 	expectErr(t, capture(t, e.tok["bob"], "a_cap", map[string]any{}), 409, "authorization_not_open")
 	expectErr(t, voidA(t, e.tok["ada"], "a_past"), 409, "authorization_not_open")
 }
 
-// Reading chosen: a clock-expired authorization may be reported as either authorization_expired
-// (its deadline passed) or authorization_not_open (its status is expired); both are 409.
+// R239: a capture on an expired authorization (clock-expired or seeded expired) is exactly
+// 409 authorization_expired.
 func expectCaptureClosed(t testing.TB, r resp) {
 	t.Helper()
-	if r.Status != 409 {
-		t.Fatalf("want 409, got %s", r)
-	}
-	code := r.obj(t)["error"].(map[string]any)["code"]
-	if code != "authorization_expired" && code != "authorization_not_open" {
-		t.Fatalf("code %v", code)
-	}
+	expectErr(t, r, 409, "authorization_expired")
 }
 
 func TestR169_SeededHoldsOverBalance(t *testing.T) {
